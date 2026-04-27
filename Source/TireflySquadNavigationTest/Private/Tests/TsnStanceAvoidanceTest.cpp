@@ -3,6 +3,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
+#include "Tests/TsnTestAutomationHelpers.h"
 #include "TsnTestChessPiece.h"
 #include "TsnTestAIController.h"
 #include "Components/TsnStanceObstacleComponent.h"
@@ -21,7 +22,7 @@ void FTsnStanceAvoidanceTest::GetTests(
 	TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("StanceAvoidance_MoverBypassesWall"));
-	OutTestCommands.Add(TEXT("/TireflySquadNavigation/Content/Test/Maps/MAP_TsnAutoTest"));
+	OutTestCommands.Add(TsnTestAutomation::DemoAutomationMapPath);
 }
 
 bool FTsnStanceAvoidanceTest::RunTest(const FString& Parameters)
@@ -66,6 +67,8 @@ bool FTsnStanceAvoidanceTest::RunTest(const FString& Parameters)
 
 		bool Initialize(UWorld* World)
 		{
+			TsnTestAutomation::ResetShowcaseActors(World);
+
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride =
 				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;

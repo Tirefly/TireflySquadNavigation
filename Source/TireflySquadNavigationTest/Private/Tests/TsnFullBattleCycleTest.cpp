@@ -3,6 +3,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
+#include "Tests/TsnTestAutomationHelpers.h"
 #include "TsnTestChessPiece.h"
 #include "TsnTestAIController.h"
 #include "TsnTestTargetDummy.h"
@@ -24,7 +25,7 @@ void FTsnFullBattleCycleTest::GetTests(
 	TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("FullBattleCycle_4Units_ChaseToStance"));
-	OutTestCommands.Add(TEXT("/TireflySquadNavigation/Content/Test/Maps/MAP_TsnAutoTest"));
+	OutTestCommands.Add(TsnTestAutomation::DemoAutomationMapPath);
 }
 
 bool FTsnFullBattleCycleTest::RunTest(const FString& Parameters)
@@ -75,16 +76,18 @@ bool FTsnFullBattleCycleTest::RunTest(const FString& Parameters)
 
 		bool Initialize(UWorld* World)
 		{
+			TsnTestAutomation::ResetShowcaseActors(World);
+
 			// 加载 BT/BB 资产
 			UBehaviorTree* BT = LoadObject<UBehaviorTree>(nullptr,
-				TEXT("/TireflySquadNavigation/Content/Test/BT/BT_TsnTestChessPiece.BT_TsnTestChessPiece"));
+				TsnTestAutomation::BehaviorTreeAssetPath);
 			UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr,
-				TEXT("/TireflySquadNavigation/Content/Test/BT/BB_TsnTest.BB_TsnTest"));
+				TsnTestAutomation::BlackboardAssetPath);
 
 			if (!BT || !BB)
 			{
 				Test->AddWarning(TEXT("BT/BB assets not found — skip FullBattleCycleTest "
-					"(requires [MANUAL] task 3.1/3.2 to create BB_TsnTest & BT_TsnTestChessPiece)"));
+					"(expected FunctionShowcase BehaviorTree assets BB_Tsn_Test and BT_Tsn_Test)"));
 				return true;
 			}
 

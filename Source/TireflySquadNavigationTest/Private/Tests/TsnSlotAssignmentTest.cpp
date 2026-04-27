@@ -3,6 +3,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
+#include "Tests/TsnTestAutomationHelpers.h"
 #include "Components/TsnEngagementSlotComponent.h"
 #include "TsnTestTargetDummy.h"
 #include "Engine/World.h"
@@ -17,7 +18,7 @@ void FTsnSlotAssignmentTest::GetTests(
 	TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("SlotAssignment_6Requesters_3Rings"));
-	OutTestCommands.Add(TEXT("/TireflySquadNavigation/Content/Test/Maps/MAP_TsnAutoTest"));
+	OutTestCommands.Add(TsnTestAutomation::DemoAutomationMapPath);
 }
 
 bool FTsnSlotAssignmentTest::RunTest(const FString& Parameters)
@@ -46,6 +47,8 @@ bool FTsnSlotAssignmentTest::RunTest(const FString& Parameters)
 				Test->AddError(TEXT("No valid World"));
 				return true;
 			}
+
+			TsnTestAutomation::ResetShowcaseActors(World);
 
 			// Spawn TargetDummy at origin
 			FActorSpawnParameters Params;
