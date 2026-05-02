@@ -11,6 +11,7 @@
 #include "BehaviorTree/BlackboardComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "GameFramework/Controller.h"
 
 ATsnTestSpawner::ATsnTestSpawner()
 {
@@ -82,8 +83,49 @@ void ATsnTestSpawner::SpawnAll()
 			Capsule->ShapeColor = (SpawnTeamID == 1) ? FColor::Blue : FColor::Red;
 		}
 
+		if (TsnTestShouldLogControllerFlow())
+		{
+			UE_LOG(LogTsnTest, Log,
+				TEXT("Spawner [%s] unit [%s] before SpawnDefaultController: AIControllerClass=%s AutoPossessAI=%d NetMode=%d"),
+				*GetName(),
+				*Piece->GetName(),
+				*GetNameSafe(Piece->AIControllerClass),
+				static_cast<int32>(Piece->AutoPossessAI),
+				static_cast<int32>(Piece->GetNetMode()));
+		}
+
 		// 创建 AI 控制器
 		Piece->SpawnDefaultController();
+
+		if (AController* SpawnedController = Piece->GetController())
+		{
+			if (TsnTestShouldLogControllerFlow())
+			{
+				UE_LOG(LogTsnTest, Log,
+					TEXT("Spawner [%s] unit [%s] controller spawned: %s"),
+					*GetName(),
+					*Piece->GetName(),
+					*GetNameSafe(SpawnedController->GetClass()));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTsnTest, Warning,
+				TEXT("Spawner [%s] unit [%s] failed to spawn controller."),
+				*GetName(),
+				*Piece->GetName());
+
+			if (TsnTestShouldLogControllerFlow())
+			{
+				UE_LOG(LogTsnTest, Log,
+					TEXT("Spawner [%s] unit [%s] controller diagnostics: AIControllerClass=%s AutoPossessAI=%d NetMode=%d"),
+					*GetName(),
+					*Piece->GetName(),
+					*GetNameSafe(Piece->AIControllerClass),
+					static_cast<int32>(Piece->AutoPossessAI),
+					static_cast<int32>(Piece->GetNetMode()));
+			}
+		}
 
 		// 配置行为树
 		if (AAIController* AICon = Cast<AAIController>(Piece->GetController()))

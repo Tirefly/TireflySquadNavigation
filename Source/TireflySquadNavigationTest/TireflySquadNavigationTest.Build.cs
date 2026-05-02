@@ -24,6 +24,7 @@ public class TireflySquadNavigationTest : ModuleRules
 				"AIModule",
 				"NavigationSystem",
 				"GameplayTasks",
+				"StateTreeModule",
 			}
 		);
 	}

@@ -40,6 +40,8 @@ public class TireflySquadNavigation : ModuleRules
 				"SlateCore",
 				"AIModule",
 				"GameplayTasks",
+				"StateTreeModule",
+				"GameplayStateTreeModule",
 			}
 			);
 		

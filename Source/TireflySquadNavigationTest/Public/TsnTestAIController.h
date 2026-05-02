@@ -22,4 +22,8 @@ class ATsnTestAIController : public AAIController
 
 public:
 	ATsnTestAIController(const FObjectInitializer& ObjectInitializer);
+
+protected:
+	/** 记录控制器是否真的成功占有 Pawn，用于调试 StateTree 控制链。 */
+	virtual void OnPossess(APawn* InPawn) override;
 };
