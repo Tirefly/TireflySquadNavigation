@@ -6,7 +6,7 @@
 
 1. 项目已能正常编译。
 2. `TireflySquadNavigation`、`StateTree`、`GameplayStateTree` 已启用。
-3. 已按 `纯蓝图测试执行指南.md` 建好基础资产：棋子蓝图、TargetDummy、Spawner、三张演示地图。
+3. 已按 `BehaviorTree 测试执行指南.md` 建好基础资产：棋子蓝图、TargetDummy、Spawner、三张演示地图。
 
 ## 1. 创建 `ST_Tsn_Test`
 

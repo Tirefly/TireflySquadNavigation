@@ -1,4 +1,4 @@
-# TireflySquadNavigation 纯蓝图测试执行指南（UE 5.7）
+# TireflySquadNavigation BehaviorTree 测试执行指南（UE 5.7）
 
 ## 1. 目标与范围
 
@@ -7,11 +7,10 @@
 - 搭建 3 张演示关卡（`MAP_TsnDemo_Siege`、`MAP_TsnDemo_Skirmish`、`MAP_TsnDemo_MovingTarget`）
 - 创建并配置黑板/行为树资产
 - 创建并配置蓝图子类（棋子/靶标/生成器）
-- （可选）创建与修改状态树资产用于实验流程
 - 在 Session Frontend 中完成自动化测试
 
 > 关键说明：当前测试模块的 `FullBattleCycleTest` 代码路径明确依赖 `BT_Tsn_Test + BB_Tsn_Test`。  
-> 状态树可以用于你在 PIE 里的行为实验，但不会替代该自动化用例的 BT 依赖。
+> 如果你要走 StateTree 路径，请直接看 `StateTree 测试执行指南.md`；本文只覆盖 Blackboard + BehaviorTree 流程。
 
 ---
 
@@ -238,81 +237,15 @@
 
 ---
 
-## 9. （可选）创建与修改状态树（StateTree）
+## 9. 如需 StateTree 路径
 
-> 这部分用于你在编辑器内做“纯蓝图行为实验”。  
-> 自动化测试中的 `FullBattleCycleTest` 仍按代码固定读取 BT/BB 资产，不会读取该状态树。
+如果你要用 StateTree 复现同一组演示场景，不要继续在本文里混配 BT 与 StateTree 流程，直接查看 `StateTree 测试执行指南.md`。
 
-### 9.1 创建状态树资产
+原因很简单：
 
-1. 在 `Test/StateTree` 右键 -> Artificial Intelligence -> StateTree，命名 `ST_TsnTestChessPiece_Exp`。
-2. 在状态树 Schema 里使用 AI 相关 schema（若项目模板要求）。
-3. 添加参数/上下文（命名建议）：
-- `TargetActor`（Actor）
-- `HasTarget`（Bool）
-- `AttackDuration`（Float，默认 2.0）
-
-### 9.2 推荐状态分层
-
-建议最小可用状态链：
-
-- `SelectTarget`
-- `Chase`
-- `ApproachSlot`
-- `EnterStance`
-- `Attack`
-- `ReleaseSlot`
-- `ExitStance`
-
-每个状态做一件事，完成后 Transition 到下一状态；失败回 `SelectTarget`。
-
-### 9.3 与现有插件节点对齐的实现建议
-
-插件已经提供了与 BT 节点等价的 StateTree 任务、评估器与条件，可直接在状态树资产里组装：
-
-- Tasks：`TSN Chase Engagement Target` / `TSN Move To Engagement Slot` / `TSN Enter Stance Mode` / `TSN Exit Stance Mode` / `TSN Release Engagement Slot`
-- Evaluators：`TSN Combat Context`（输出有效性 / 距离 / 攻击范围 / 预战斗范围 / 距离布尔）、`TSN Target Motion`（输出速度 / 是否静止）
-- Conditions：`TSN Has Valid Target` / `TSN Is In PreEngagement Range` / `TSN Is In Engagement Range` / `TSN Is Target Stationary` / `TSN Is In Stance Mode`
-
-UE 5.7 下有一个容易踩坑的点：**后续 Task 的 `ContextParameters` / `InParameters` 可以直接绑定前序 Task 的输出，但 Global Evaluator 不能直接消费 Task 的 `OutParameters`**。所以只要某份数据既要给 Global Evaluator 用，又要给多个 Task 用，最好还是放进一组共享 `Parameters` 里中转。推荐至少准备这些 Parameters：
-
-- `CurrentTargetActor`
-- `HasTarget`
-- `SearchRadius`
-- `PreEngagementRadiusMultiplier`
-- `AttackDuration`
-
-然后按这个方向接线：
-
-- `TSN Test Select Target`：把 `SearchRadius` 读自 `Parameters.SearchRadius`，再把结果写回 `Parameters.CurrentTargetActor` / `Parameters.HasTarget`
-- `TSN Combat Context`：读取 `Parameters.CurrentTargetActor` / `Parameters.PreEngagementRadiusMultiplier`
-- `TSN Chase Engagement Target` / `TSN Move To Engagement Slot` / `TSN Release Engagement Slot`：统一读取 `Parameters.CurrentTargetActor`
-- `TSN Test Attack`：读取 `Parameters.AttackDuration`
-
-最小推荐链：`Chase → MoveToEngagementSlot → EnterStance → 攻击 → ReleaseEngagementSlot → ExitStance`。
-`MoveToEngagementSlot` 在成功结束时保留槽位，失败 / 中断时自动释放槽位；离开 Engage 状态前用显式 `ReleaseEngagementSlot` 清理。
-
-#### 配合测试模块的 demo Tasks 复现 3 个演示场景
-
-要让上面的链在 Siege / Skirmish / MovingTarget 三张地图里完整跑起来，还需要选目标和模拟攻击两步。运行时插件不提供这两类节点（属于宿主项目策略），但 *测试模块* `TireflySquadNavigationTest` 提供了与 BT 等价的两个 demo-only StateTree 任务：
-
-- `TSN Test Select Target`：与 `TsnTestBTTask_SelectTarget` 等价。按 TeamID 全场扫描敌方棋子和靶标，再把命中结果写回共享 `Parameters` 中的 `CurrentTargetActor` / `HasTarget`，供 Global Evaluator 和后续 Task 共同读取。
-- `TSN Test Attack`：与 `TsnTestBTTask_Attack` 等价。`AttackDuration` 默认 2 秒，到时返回 Succeeded。
-
-完整的演示状态链：`Test Select Target → Chase → MoveToEngagementSlot → EnterStance → Test Attack → ReleaseEngagementSlot → ExitStance → 回到 Test Select Target`。
-所有需要 `TargetActor` 的下游 Task / Evaluator 都统一读取共享 `Parameters.CurrentTargetActor`，这样可以同时兼容 Global Evaluator 与任务链绑定，效果上等价于 BT 中的 Blackboard Key。
-
-> 自动化测试中的 `FullBattleCycleTest` 仍按代码固定读取 BT/BB 资产，不会读取你创建的状态树资产；StateTree 节点是为宿主项目准备的可选决策层，不影响 BT 自动化测试。
-
-### 9.4 修改状态树的安全策略
-
-每次改动后都做 3 项回归：
-
-1. 单位是否能稳定从 `SelectTarget` 进入 `Chase`
-2. 站桩后是否会释放槽位再退出姿态
-3. 目标失效时是否能回到 `SelectTarget`
-
-只要其中一项失败，就先回退最近修改，缩小改动范围再试。
+- `FullBattleCycleTest` 当前明确依赖 `BT_Tsn_Test + BB_Tsn_Test`
+- 本文的目标是把 Blackboard / BehaviorTree 路径跑通并稳定复现
+- StateTree 现在已经有单独文档，不再和 BT 指南混写
 
 ---
 
@@ -358,4 +291,4 @@ UE 5.7 下有一个容易踩坑的点：**后续 Task 的 `ContextParameters` / 
 - [ ] `Functional` 3 项测试可复用 `MAP_TsnDemo_Siege` 正常启动
 - [ ] Automation 5 项测试全部通过
 
-完成以上条目后，纯蓝图端测试流程即闭环完成。
+完成以上条目后，BehaviorTree 测试流程即闭环完成。

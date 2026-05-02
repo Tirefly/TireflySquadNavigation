@@ -26,8 +26,11 @@
 - `UTsnUnitSeparationComponent`：可选，补充 Moving↔Moving 之间的软分离
 - BT 节点：`TsnBTTask_ChaseEngagementTarget`、`TsnBTTask_MoveToEngagementSlot`、`TsnBTTask_EnterStanceMode`、`TsnBTTask_ReleaseEngagementSlot`、`TsnBTTask_ExitStanceMode`
 - Decorator：`TsnBTDecorator_IsTargetStationary`
+- StateTree 运行时节点：追击目标、移动到槽位、进入/退出站桩、释放槽位，以及战斗上下文/目标运动评估器与相关条件节点
 
 编辑器测试模块 `TireflySquadNavigationTest` 额外提供演示资产和自动化测试，但它是 **Editor-only**，不会进入 Shipping 包。
+
+它还包含测试专用 BT / StateTree 节点，例如 `SelectTarget` 和 `Attack`，这些节点用于演示与测试，不属于运行时插件 API。
 
 ## 插件不提供什么
 
@@ -39,6 +42,25 @@
 - UI、特效、动画同步
 
 测试模块里有 `SelectTarget` 和 `Attack` 示例节点，但它们属于演示与测试，不是运行时插件 API 的一部分。
+
+## 目录速览
+
+- `Source/TireflySquadNavigation/`：运行时模块，放可复用组件、子系统、NavArea、BT 与 StateTree 节点
+- `Source/TireflySquadNavigationTest/`：Editor-only 测试模块，放演示 Actor、自动化测试和测试专用节点
+- `Content/FunctionShowcase/`：演示地图、蓝图、BT/Blackboard 资产
+- `Documents/`：技术方案、测试模块说明、纯蓝图与 StateTree 执行指南
+- `openspec/`：插件级 OpenSpec 工作区；本仓库默认的 OpenSpec 变更都在这里管理
+
+## 决策层支持
+
+当前插件同时支持 **BehaviorTree** 和 **StateTree** 两条决策接入路径。
+
+- BehaviorTree：适合已经有 Blackboard / BT 体系的宿主项目，插件直接提供接敌、占位、站桩、释放等运行时节点
+- StateTree：适合 UE 5.7 下的新流程接入，运行时模块提供可复用节点，测试模块提供最小演示用 `SelectTarget` / `Attack` 节点
+
+如果你要按当前工程里的最小 StateTree 路径复现演示场景，优先看：
+
+- `Documents/StateTree 测试执行指南.md`
 
 ## 快速接入
 
@@ -277,11 +299,43 @@ bForceRebuildOnLoad=True
 
 - `Window -> Developer Tools -> Session Frontend -> Automation`
 
+## 开发工作流
+
+如果你是在这个插件仓库里继续开发 TSN，而不是单纯接入使用，推荐按下面的顺序工作：
+
+1. 先看 `Documents/战场小队导航系统 - 技术方案文档 V2.md`，确认当前架构和术语
+2. 若变更属于功能/规格层，进入 `openspec/` 按插件级工作区维护 proposal / spec / archive
+3. 改完 C++ 后刷新项目文件，再编译 `SquadNavDevEditor Win64 Development`
+4. 先在 `FunctionShowcase` 地图做行为烟雾测试，再视需要跑 Automation
+
+OpenSpec CLI 现在默认应从插件目录执行，例如：
+
+```bash
+Push-Location "E:\Projects_Unreal\SquadNavDev\Plugins\TireflySquadNavigation"
+openspec list
+openspec list --specs
+openspec validate --specs --strict --no-interactive
+Pop-Location
+```
+
+新增或删除 C++ 文件后，先刷新 Unreal 项目文件：
+
+```bash
+"E:\UnrealEngine\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" -projectfiles -project="E:\Projects_Unreal\SquadNavDev\SquadNavDev.uproject" -game -rocket -progress
+```
+
+推荐的编译验证命令：
+
+```bash
+"E:\UnrealEngine\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" SquadNavDevEditor Win64 Development -Project="E:\Projects_Unreal\SquadNavDev\SquadNavDev.uproject" -rocket -progress
+```
+
 ## 进一步文档
 
 - [战场小队导航系统 - 技术方案文档 V2](Documents/%E6%88%98%E5%9C%BA%E5%B0%8F%E9%98%9F%E5%AF%BC%E8%88%AA%E7%B3%BB%E7%BB%9F%20-%20%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88%E6%96%87%E6%A1%A3%20V2.md)
+- [StateTree 测试执行指南](Documents/StateTree%20%E6%B5%8B%E8%AF%95%E6%89%A7%E8%A1%8C%E6%8C%87%E5%8D%97.md)
 - [测试模块说明](Documents/%E6%B5%8B%E8%AF%95%E6%A8%A1%E5%9D%97%E8%AF%B4%E6%98%8E.md)
-- [纯蓝图测试执行指南](Documents/%E7%BA%AF%E8%93%9D%E5%9B%BE%E6%B5%8B%E8%AF%95%E6%89%A7%E8%A1%8C%E6%8C%87%E5%8D%97.md)
+- [BehaviorTree 测试执行指南](Documents/BehaviorTree%20%E6%B5%8B%E8%AF%95%E6%89%A7%E8%A1%8C%E6%8C%87%E5%8D%97.md)
 
 如果你只想快速验证插件是否工作，最短路径是：
 
