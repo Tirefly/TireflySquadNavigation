@@ -27,6 +27,7 @@ public class TireflySquadNavigation : ModuleRules
 			{
 				"Core",
 				"NavigationSystem",
+				"StateTreeModule",
 			}
 			);
 			
@@ -40,8 +41,6 @@ public class TireflySquadNavigation : ModuleRules
 				"SlateCore",
 				"AIModule",
 				"GameplayTasks",
-				"StateTreeModule",
-				"GameplayStateTreeModule",
 			}
 			);
 		

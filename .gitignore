@@ -72,3 +72,11 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# UnrealSharp generated C# outputs
+# Keep generated glue sources/UHT bindings trackable when this plugin is shared standalone.
+Script/**/bin/
+Script/**/obj/*
+!Script/**/obj/UHT/
+!Script/**/obj/UHT/**
+Script/**/Properties/launchSettings.json

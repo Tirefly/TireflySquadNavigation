@@ -14,6 +14,12 @@
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		}
+	],
 	"Modules": [
 		{
 			"Name": "TireflySquadNavigation",

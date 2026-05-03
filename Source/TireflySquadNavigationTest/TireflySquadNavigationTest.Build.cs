@@ -12,6 +12,7 @@ public class TireflySquadNavigationTest : ModuleRules
 			new string[]
 			{
 				"Core",
+				"StateTreeModule",
 			}
 		);
 
@@ -24,7 +25,6 @@ public class TireflySquadNavigationTest : ModuleRules
 				"AIModule",
 				"NavigationSystem",
 				"GameplayTasks",
-				"StateTreeModule",
 			}
 		);
 	}
