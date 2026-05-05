@@ -144,11 +144,15 @@ private:
 	/**
 	 * 在指定半径的环上，从理想角度开始寻找不冲突的角度。
 	 *
+	 * 会优先选择导航可达、路径代价更低的候选角度；
+	 * 若导航不可用或全部候选都不可达，再退回纯几何角度选择。
+	 *
+	 * @param Requester    请求槽位的 Actor
 	 * @param IdealAngleDeg 理想角度（请求者相对目标的方位角）
 	 * @param Radius        环的半径
 	 * @return 满足最小间距约束的可用角度
 	 */
-	float FindUnoccupiedAngle(float IdealAngleDeg, float Radius) const;
+	float FindUnoccupiedAngle(AActor* Requester, float IdealAngleDeg, float Radius) const;
 
 	/**
 	 * 计算指定本地角度和半径在目标当前位置下的世界空间快照。

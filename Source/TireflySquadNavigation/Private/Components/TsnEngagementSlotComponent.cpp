@@ -2,6 +2,8 @@
 
 #include "Components/TsnEngagementSlotComponent.h"
 #include "Subsystems/TsnEngagementSlotSubsystem.h"
+#include "NavigationSystem.h"
+#include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
 #include "TsnLog.h"
 
@@ -63,7 +65,7 @@ FVector UTsnEngagementSlotComponent::RequestSlot(AActor* Requester, float Attack
 	float IdealAngleDeg = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
 
 	// 找不冲突的空位角度
-	float BestAngle = FindUnoccupiedAngle(IdealAngleDeg, Radius);
+	float BestAngle = FindUnoccupiedAngle(Requester, IdealAngleDeg, Radius);
 
 	// 注册槽位并向子系统登记
 	FTsnEngagementSlotInfo NewSlot;
@@ -128,7 +130,7 @@ bool UTsnEngagementSlotComponent::IsSlotAvailable(AActor* Requester) const
 }
 
 float UTsnEngagementSlotComponent::FindUnoccupiedAngle(
-	float IdealAngleDeg, float Radius) const
+	AActor* Requester, float IdealAngleDeg, float Radius) const
 {
 	// 收集同环上已被占据的角度
 	TArray<float> OccupiedAngles;
@@ -146,12 +148,60 @@ float UTsnEngagementSlotComponent::FindUnoccupiedAngle(
 		return IdealAngleDeg;
 	}
 
+	const UWorld* World = GetWorld();
+	const UNavigationSystemV1* NavSys = World
+		? FNavigationSystem::GetCurrent<UNavigationSystemV1>(World)
+		: nullptr;
+	const FVector RequesterLocation = IsValid(Requester)
+		? Requester->GetActorLocation()
+		: FVector::ZeroVector;
+
+	auto CalculateCandidateScore = [this, NavSys, Requester, &RequesterLocation, Radius](float CandidateAngle, float& OutScore, bool& bOutReachable)
+	{
+		const FVector CandidateLocation = CalculateWorldPosition(CandidateAngle, Radius);
+		bOutReachable = false;
+		OutScore = FVector::Dist2D(RequesterLocation, CandidateLocation);
+
+		if (!NavSys || !IsValid(Requester))
+		{
+			return;
+		}
+
+		FNavLocation ProjectedLocation;
+		if (!NavSys->ProjectPointToNavigation(CandidateLocation, ProjectedLocation))
+		{
+			return;
+		}
+
+			UNavigationPath* NavPath = UNavigationSystemV1::FindPathToLocationSynchronously(
+				Requester,
+			RequesterLocation,
+			ProjectedLocation.Location,
+			Requester);
+		if (!IsValid(NavPath) || !NavPath->IsValid() || NavPath->IsPartial())
+		{
+			return;
+		}
+
+		bOutReachable = true;
+		OutScore = 0.f;
+		for (int32 PointIndex = 1; PointIndex < NavPath->PathPoints.Num(); ++PointIndex)
+		{
+			OutScore += FVector::Dist2D(NavPath->PathPoints[PointIndex - 1], NavPath->PathPoints[PointIndex]);
+		}
+	};
+
 	// 基于半径计算最小角度间隔（弧长 = 半径 × 弧度）
 	float MinAngularGapDeg = FMath::RadiansToDegrees(MinSlotSpacing / Radius);
 	MinAngularGapDeg = FMath::Max(MinAngularGapDeg, 25.f);
 
 	// 从理想角度出发，正负交替搜索空位
 	float SearchStep = MinAngularGapDeg * 0.5f;
+	float BestReachableAngle = IdealAngleDeg;
+	float BestReachableScore = TNumericLimits<float>::Max();
+	bool bFoundReachableCandidate = false;
+	float BestFallbackAngle = IdealAngleDeg;
+	float BestFallbackScore = TNumericLimits<float>::Max();
 	for (float Offset = 0.f; Offset <= 180.f; Offset += SearchStep)
 	{
 		float Candidates[2] = { IdealAngleDeg + Offset, IdealAngleDeg - Offset };
@@ -169,8 +219,39 @@ float UTsnEngagementSlotComponent::FindUnoccupiedAngle(
 					break;
 				}
 			}
-			if (!bConflict) return Candidates[i];
+			if (bConflict)
+			{
+				continue;
+			}
+
+			float CandidateScore = 0.f;
+			bool bCandidateReachable = false;
+			CalculateCandidateScore(Candidates[i], CandidateScore, bCandidateReachable);
+			if (bCandidateReachable)
+			{
+				if (!bFoundReachableCandidate || CandidateScore < BestReachableScore)
+				{
+					bFoundReachableCandidate = true;
+					BestReachableAngle = Candidates[i];
+					BestReachableScore = CandidateScore;
+				}
+			}
+			else if (CandidateScore < BestFallbackScore)
+			{
+				BestFallbackAngle = Candidates[i];
+				BestFallbackScore = CandidateScore;
+			}
 		}
+	}
+
+	if (bFoundReachableCandidate)
+	{
+		return BestReachableAngle;
+	}
+
+	if (BestFallbackScore < TNumericLimits<float>::Max())
+	{
+		return BestFallbackAngle;
 	}
 
 	// 环被占满 → 返回理想角度（不阻塞攻击）

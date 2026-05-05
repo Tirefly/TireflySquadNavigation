@@ -9,6 +9,13 @@
 #include "Interfaces/ITsnTacticalUnit.h"
 #include "TsnLog.h"
 
+namespace
+{
+	// Crowd/PathFollowing 在接近槽位时可能会停在 AcceptanceRadius 外几个单位内，
+	// 给一个很小的抖动容差，避免任务在 30.1 / 30.5 这类边缘距离上反复零意图恢复。
+	constexpr float SlotArrivalJitterTolerance = 5.f;
+}
+
 UTsnBTTask_MoveToEngagementSlot::UTsnBTTask_MoveToEngagementSlot()
 {
 	NodeName = TEXT("TSN Move To Engagement Slot");
@@ -46,7 +53,7 @@ AActor* UTsnBTTask_MoveToEngagementSlot::GetTargetActor(
 }
 
 bool UTsnBTTask_MoveToEngagementSlot::RequestSlotAndMove(
-	UBehaviorTreeComponent& OwnerComp, AActor* Target)
+	UBehaviorTreeComponent& OwnerComp, AActor* Target, bool bForceRefreshSlotAssignment)
 {
 	AAIController* AICon = OwnerComp.GetAIOwner();
 	if (!AICon || !AICon->GetPawn()) return false;
@@ -55,20 +62,28 @@ bool UTsnBTTask_MoveToEngagementSlot::RequestSlotAndMove(
 		Target->FindComponentByClass<UTsnEngagementSlotComponent>();
 	if (!SlotComp) return false;
 
-	// 槽满检查：返回 false 让 BT 树进入失败分支、重新选择目标
-	if (!SlotComp->IsSlotAvailable(AICon->GetPawn()))
+	if (bForceRefreshSlotAssignment && SlotComp->HasSlot(AICon->GetPawn()))
 	{
-		UE_LOG(LogTireflySquadNav, Log,
-			TEXT("MoveToEngagementSlot: Target [%s] slots are full, returning Failed."),
-			*Target->GetName());
-		return false;
+		SlotComp->ReleaseSlot(AICon->GetPawn());
+	}
+
+	// 槽位组件自身已经提供了“槽满时返回合理 fallback 位置”的容错，
+	// 这里不要再提前 Failed，否则行为树会直接掉出接敌流程并长期 Idle。
+	const bool bUsingFallbackSlotLocation = !SlotComp->IsSlotAvailable(AICon->GetPawn());
+	if (bUsingFallbackSlotLocation)
+	{
+		UE_LOG(LogTireflySquadNav, Verbose,
+			TEXT("MoveToEngagementSlot: Target [%s] slots are full for Pawn=%s, using fallback location instead of failing."),
+			*Target->GetName(),
+			*GetNameSafe(AICon->GetPawn()));
 	}
 
 	CachedSlotPosition = SlotComp->RequestSlot(AICon->GetPawn(), CachedAttackRange);
+	const float EffectiveAcceptanceRadius = AcceptanceRadius + SlotArrivalJitterTolerance;
 
 	FAIMoveRequest MoveReq;
 	MoveReq.SetGoalLocation(CachedSlotPosition);
-	MoveReq.SetAcceptanceRadius(AcceptanceRadius);
+	MoveReq.SetAcceptanceRadius(EffectiveAcceptanceRadius);
 	MoveReq.SetUsePathfinding(true);
 	// 与 TickTask 的槽位到达判定保持一致：按中心点到槽位快照的二维距离判断，
 	// 不额外叠加追击者胶囊半径，避免 PathFollowing 先停下而任务仍卡在 InProgress。
@@ -162,9 +177,19 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 	}
 
 	FVector PawnLoc = AICon->GetPawn()->GetActorLocation();
+	const float EffectiveAcceptanceRadius = AcceptanceRadius + SlotArrivalJitterTolerance;
+	FVector LiveSlotPosition = CachedSlotPosition;
+	if (UTsnEngagementSlotComponent* SlotComp = Target->FindComponentByClass<UTsnEngagementSlotComponent>())
+	{
+		// 使用当前已认领槽位的实时世界快照做判定，避免长期追逐过期的旧位置。
+		LiveSlotPosition = SlotComp->RequestSlot(AICon->GetPawn(), CachedAttackRange);
+	}
+	const float DistanceToTarget = FVector::Dist2D(PawnLoc, Target->GetActorLocation());
+	const float LiveSlotRadius = FVector::Dist2D(Target->GetActorLocation(), LiveSlotPosition);
+	const bool bWithinSlotRadiusTolerance = FMath::Abs(DistanceToTarget - LiveSlotRadius) <= EffectiveAcceptanceRadius;
 
 	// 退出条件 (a)：到达槽位
-	if (FVector::Dist2D(PawnLoc, CachedSlotPosition) <= AcceptanceRadius)
+	if (FVector::Dist2D(PawnLoc, LiveSlotPosition) <= EffectiveAcceptanceRadius)
 	{
 		AICon->StopMovement();
 		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
@@ -172,7 +197,7 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 	}
 
 	// 退出条件 (b)：中途进入攻击距离（目标向自身靠近）
-	if (FVector::Dist2D(PawnLoc, Target->GetActorLocation()) <= CachedAttackRange)
+	if (DistanceToTarget <= CachedAttackRange)
 	{
 		AICon->StopMovement();
 		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
@@ -213,6 +238,15 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 			TimeSinceLastZeroIntentRecoveryCheck += DeltaSeconds;
 			if (TimeSinceLastZeroIntentRecoveryCheck >= ZeroIntentRecoveryDelay)
 			{
+				if (bWithinSlotRadiusTolerance)
+				{
+					// 已经处在目标周围的正确半径带里时，
+					// 不要继续为了精确角度与排斥/分离力对抗，直接交给后续站桩战斗阶段。
+					AICon->StopMovement();
+					FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+					return;
+				}
+
 				const FString PathStatusDesc = PathComp
 					? PathComp->GetStatusDesc()
 					: TEXT("NoPathFollowingComponent");
@@ -221,7 +255,7 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 					TEXT("MoveToEngagementSlot: zero-intent stall recovery for Pawn=%s Target=%s DistToSlot=%.1f RequestedSpeed=%.1f ActualSpeed=%.1f MoveStatus=%d PathStatus=%s HasValidPath=%s EscapeActive=%s"),
 					*GetNameSafe(AICon->GetPawn()),
 					*GetNameSafe(Target),
-					FVector::Dist2D(PawnLoc, CachedSlotPosition),
+					FVector::Dist2D(PawnLoc, LiveSlotPosition),
 					RequestedSpeed,
 					ActualSpeed,
 					static_cast<int32>(AICon->GetMoveStatus()),
@@ -230,7 +264,8 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 					MoveComp->IsEscapeModeActive() ? TEXT("true") : TEXT("false"));
 
 				TimeSinceLastZeroIntentRecoveryCheck = 0.f;
-				if (!RequestSlotAndMove(OwnerComp, Target))
+				// 零意图恢复时不要死守旧槽位；释放后重认领，避免反复重试坏角度。
+				if (!RequestSlotAndMove(OwnerComp, Target, true))
 				{
 					AICon->StopMovement();
 					FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
@@ -263,13 +298,20 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 	if (TimeSinceLastRePathCheck >= RePathCheckInterval)
 	{
 		TimeSinceLastRePathCheck = 0.f;
-		const bool bTargetMoved =
-			FVector::Dist2D(CachedTargetLocation, Target->GetActorLocation())
+		const bool bSlotMoved =
+			FVector::Dist2D(CachedSlotPosition, LiveSlotPosition)
 			> RePathDistanceThreshold;
 		const bool bPathStopped = AICon->GetMoveStatus() != EPathFollowingStatus::Moving;
-		if (bTargetMoved || bPathStopped)
+		if (bPathStopped && bWithinSlotRadiusTolerance)
 		{
-			if (!RequestSlotAndMove(OwnerComp, Target))
+			AICon->StopMovement();
+			FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+			return;
+		}
+
+		if (bSlotMoved || bPathStopped)
+		{
+			if (!RequestSlotAndMove(OwnerComp, Target, bPathStopped))
 			{
 				AICon->StopMovement();
 				FinishLatentTask(OwnerComp, EBTNodeResult::Failed);

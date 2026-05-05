@@ -13,8 +13,15 @@ namespace
 {
 	// 目标点必须明显落在预战斗半径内侧，否则 MoveTo 容易在“仍未进入 Chase 退出距离”时
 	// 直接返回 AlreadyAtGoal，导致 PathFollowing 维持 Idle 且任务卡在 InProgress。
-	constexpr float ChaseGoalRingInset = 60.f;
+	constexpr float ChaseGoalRingInset = 90.f;
 	constexpr float ChaseGoalAcceptanceRadius = 20.f;
+	// 追击任务的成功判定需要比纯几何边界稍微宽一点，避免只差几厘米时
+	// PathFollowing 已经停下，而 BT 还在等待“严格进入预战斗半径”。
+	constexpr float ChaseArrivalJitterTolerance = 10.f;
+	// 若导航投影把候选点吸回到 Pawn 身边或几乎不减少与目标的距离，
+	// 这类追击点只会导致零意图恢复反复触发，应当直接丢弃。
+	constexpr float ChaseGoalMinimumMoveDistance = 35.f;
+	constexpr float ChaseGoalMinimumTargetDistanceGain = 10.f;
 	constexpr float ChaseGoalProjectionExtentXY = 120.f;
 	constexpr float ChaseGoalProjectionExtentZ = 200.f;
 	constexpr float ChaseGoalAngleOffsets[] =
@@ -89,6 +96,7 @@ bool UTsnBTTask_ChaseEngagementTarget::RequestChaseMove(
 
 	const FVector PawnLoc = Pawn->GetActorLocation();
 	const FVector TargetLoc = Target->GetActorLocation();
+	const float CurrentDistanceToTarget = FVector::Dist2D(PawnLoc, TargetLoc);
 	FVector PreferredDirection = (PawnLoc - TargetLoc).GetSafeNormal2D();
 	if (PreferredDirection.IsNearlyZero())
 	{
@@ -116,6 +124,12 @@ bool UTsnBTTask_ChaseEngagementTarget::RequestChaseMove(
 	FNavLocation ProjectedGoalLocation;
 	FVector ChosenGoalLocation = FVector::ZeroVector;
 	bool bFoundProjectedGoal = false;
+	FVector FallbackProjectedGoalLocation = FVector::ZeroVector;
+	bool bHasFallbackProjectedGoal = false;
+	bool bRejectedProjectedGoal = false;
+	FVector LastRejectedGoalLocation = FVector::ZeroVector;
+	float LastRejectedGoalDistanceToTarget = 0.f;
+	float LastRejectedGoalMoveDistance = 0.f;
 	for (float AngleOffset : ChaseGoalAngleOffsets)
 	{
 		const FVector CandidateDirection = PreferredDirection.RotateAngleAxis(
@@ -127,6 +141,33 @@ bool UTsnBTTask_ChaseEngagementTarget::RequestChaseMove(
 				ProjectedGoalLocation,
 				ProjectionExtent))
 		{
+			if (!bHasFallbackProjectedGoal)
+			{
+				FallbackProjectedGoalLocation = ProjectedGoalLocation.Location;
+				bHasFallbackProjectedGoal = true;
+			}
+
+			const float CandidateDistanceToTarget = FVector::Dist2D(
+				ProjectedGoalLocation.Location,
+				TargetLoc);
+			const float CandidateMoveDistance = FVector::Dist2D(
+				ProjectedGoalLocation.Location,
+				PawnLoc);
+			const bool bGoalStillOutsidePreEngagement = CandidateDistanceToTarget
+				> CachedPreEngagementRadius - ChaseArrivalJitterTolerance;
+			const bool bGoalMakesTooLittleProgress = CurrentDistanceToTarget
+				> CachedPreEngagementRadius + ChaseArrivalJitterTolerance
+				&& (CandidateMoveDistance <= ChaseGoalMinimumMoveDistance
+					|| CandidateDistanceToTarget >= CurrentDistanceToTarget - ChaseGoalMinimumTargetDistanceGain);
+			if (bGoalStillOutsidePreEngagement || bGoalMakesTooLittleProgress)
+			{
+				bRejectedProjectedGoal = true;
+				LastRejectedGoalLocation = ProjectedGoalLocation.Location;
+				LastRejectedGoalDistanceToTarget = CandidateDistanceToTarget;
+				LastRejectedGoalMoveDistance = CandidateMoveDistance;
+				continue;
+			}
+
 			ChosenGoalLocation = ProjectedGoalLocation.Location;
 			bFoundProjectedGoal = true;
 			break;
@@ -135,14 +176,36 @@ bool UTsnBTTask_ChaseEngagementTarget::RequestChaseMove(
 
 	if (!bFoundProjectedGoal)
 	{
+		if (bHasFallbackProjectedGoal)
+		{
+			ChosenGoalLocation = FallbackProjectedGoalLocation;
+			bFoundProjectedGoal = true;
+			UE_LOG(LogTireflySquadNav, Verbose,
+				TEXT("TsnBTTask_ChaseEngagementTarget: falling back to first projected chase goal for Pawn=%s Target=%s Goal=%s RejectedProjectedGoal=%s RejectedGoal=%s RejectedGoalDist=%.1f RejectedGoalMove=%.1f"),
+				*GetNameSafe(Pawn),
+				*GetNameSafe(Target),
+				*ChosenGoalLocation.ToCompactString(),
+				bRejectedProjectedGoal ? TEXT("true") : TEXT("false"),
+				*LastRejectedGoalLocation.ToCompactString(),
+				LastRejectedGoalDistanceToTarget,
+				LastRejectedGoalMoveDistance);
+		}
+	}
+
+	if (!bFoundProjectedGoal)
+	{
 		UE_LOG(LogTireflySquadNav, Warning,
-			TEXT("TsnBTTask_ChaseEngagementTarget: failed to project chase goal for Pawn=%s Target=%s PawnProjected=%s PawnLoc=%s TargetLoc=%s DesiredGoalDistance=%.1f"),
+			TEXT("TsnBTTask_ChaseEngagementTarget: failed to find useful chase goal for Pawn=%s Target=%s PawnProjected=%s PawnLoc=%s TargetLoc=%s DesiredGoalDistance=%.1f RejectedProjectedGoal=%s RejectedGoal=%s RejectedGoalDist=%.1f RejectedGoalMove=%.1f"),
 			*GetNameSafe(Pawn),
 			*GetNameSafe(Target),
 			bPawnProjected ? TEXT("true") : TEXT("false"),
 			*PawnLoc.ToCompactString(),
 			*TargetLoc.ToCompactString(),
-			DesiredGoalDistance);
+			DesiredGoalDistance,
+			bRejectedProjectedGoal ? TEXT("true") : TEXT("false"),
+			*LastRejectedGoalLocation.ToCompactString(),
+			LastRejectedGoalDistanceToTarget,
+			LastRejectedGoalMoveDistance);
 		return false;
 	}
 
@@ -214,7 +277,7 @@ EBTNodeResult::Type UTsnBTTask_ChaseEngagementTarget::ExecuteTask(
 
 	// 已在预战斗距离内（含已在攻击距离内）→ 无需追击
 	if (FVector::Dist2D(Pawn->GetActorLocation(), Target->GetActorLocation())
-		<= CachedPreEngagementRadius)
+		<= CachedPreEngagementRadius + ChaseArrivalJitterTolerance)
 	{
 		return EBTNodeResult::Succeeded;
 	}
@@ -247,7 +310,7 @@ void UTsnBTTask_ChaseEngagementTarget::TickTask(
 
 	float Dist = FVector::Dist2D(AICon->GetPawn()->GetActorLocation(),
 		Target->GetActorLocation());
-	if (Dist <= CachedPreEngagementRadius)
+	if (Dist <= CachedPreEngagementRadius + ChaseArrivalJitterTolerance)
 	{
 		AICon->StopMovement();
 		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
@@ -304,6 +367,13 @@ void UTsnBTTask_ChaseEngagementTarget::TickTask(
 					MoveComp->IsEscapeModeActive() ? TEXT("true") : TEXT("false"));
 
 				TimeSinceLastZeroIntentRecoveryCheck = 0.f;
+				if (!bHasValidPath && AICon->GetMoveStatus() != EPathFollowingStatus::Moving)
+				{
+					AICon->StopMovement();
+					FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+					return;
+				}
+
 				if (!RequestChaseMove(OwnerComp, Target))
 				{
 					FinishLatentTask(OwnerComp, EBTNodeResult::Failed);

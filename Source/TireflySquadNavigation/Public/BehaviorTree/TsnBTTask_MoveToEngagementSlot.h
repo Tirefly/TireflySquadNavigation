@@ -125,9 +125,14 @@ private:
 	 *
 	 * @param OwnerComp 所属行为树组件
 	 * @param Target    攻击目标
+	 * @param bForceRefreshSlotAssignment 是否先释放旧槽位再重新认领，
+	 *                                    用于从明显卡死的坏槽位恢复
 	 * @return 是否成功
 	 */
-	bool RequestSlotAndMove(UBehaviorTreeComponent& OwnerComp, AActor* Target);
+	bool RequestSlotAndMove(
+		UBehaviorTreeComponent& OwnerComp,
+		AActor* Target,
+		bool bForceRefreshSlotAssignment = false);
 
 	/**
 	 * 释放当前持有的交战槽位。
