@@ -49,6 +49,13 @@ SourceArt/**/*.tga
 Binaries/*
 Plugins/**/Binaries/*
 
+# Keep the minimum editor binaries needed for non-programmer teammates to open the project
+!Binaries/Win64/
+Binaries/Win64/*
+!Binaries/Win64/UnrealEditor.modules
+!Binaries/Win64/UnrealEditor-TireflySquadNavigation*.dll
+!Binaries/Win64/UnrealEditor-TireflySquadNavigation*.pdb
+
 # Builds
 Build/*
 

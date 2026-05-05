@@ -1,0 +1,8 @@
+{
+	"BuildId": "47537391",
+	"Modules": 
+	{
+		"TireflySquadNavigation": "UnrealEditor-TireflySquadNavigation.dll",
+		"TireflySquadNavigationTest": "UnrealEditor-TireflySquadNavigationTest.dll"
+	}
+}
