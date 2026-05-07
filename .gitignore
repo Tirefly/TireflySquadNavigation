@@ -35,6 +35,7 @@
 *.xcodeproj
 *.xcworkspace
 *.sln
+!Script/*.sln
 *.suo
 *.opensdf
 *.sdf
@@ -81,9 +82,10 @@ Plugins/**/Intermediate/*
 DerivedDataCache/*
 
 # UnrealSharp generated C# outputs
-# Keep generated glue sources/UHT bindings trackable when this plugin is shared standalone.
+# Keep Script workspace files trackable while ignoring disposable local build outputs.
+!Script/*.sln
+!Script/*.Glue/
+!Script/*.RuntimeGlue/
 Script/**/bin/
-Script/**/obj/*
-!Script/**/obj/UHT/
-!Script/**/obj/UHT/**
+Script/**/obj/
 Script/**/Properties/launchSettings.json
