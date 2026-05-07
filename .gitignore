@@ -87,5 +87,8 @@ DerivedDataCache/*
 !Script/*.Glue/
 !Script/*.RuntimeGlue/
 Script/**/bin/
-Script/**/obj/
+Script/**/obj/**
+!Script/**/obj/UHT/
+!Script/**/obj/UHT/**/
+!Script/**/obj/UHT/**/*.generated.cs
 Script/**/Properties/launchSettings.json
