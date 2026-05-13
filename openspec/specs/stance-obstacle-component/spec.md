@@ -28,13 +28,33 @@
 该组件还负责保证双层防线的半径不变量：`RepulsionRadius > ObstacleRadius`。若宿主配置非法，
 组件必须在运行时做 sanitize，并以合法化后的半径继续驱动 NavModifier 和 RepulsionSubsystem。
 
-**默认属性值与编辑器约束**：
-- `ObstacleRadius = 60.f`（约等于标准胶囊体半径），`UPROPERTY` 元数据 `ClampMin = "10.0"`
-- `NavModifierExtraRadius = 45.f`，`UPROPERTY` 元数据 `ClampMin = "0.0"`；仅放大路径规划层的 NavModifier 影响半径，不改变排斥力内层边界
-- `RepulsionRadius = 150.f`，`UPROPERTY` 元数据 `ClampMin = "10.0"`
-- `RepulsionStrength = 800.f`，`UPROPERTY` 元数据 `ClampMin = "0.0"`
+默认几何参数 SHALL 不再只由组件硬编码属性承担。插件必须提供一层编辑器可见的 TSN 默认值来源；组件实例在未显式 override 时必须跟随该默认值，在显式 override 时才使用自己的局部值。
+
+**默认值来源与解析顺序**：
+- 插件 `DeveloperSettings` 提供默认的 `ObstacleRadius`、`NavModifierExtraRadius`、`RepulsionRadius`、`RepulsionStrength`、`bUseNavModifier`、`NavModifierMode` 与 `NavModifierDeactivationDelay`
+- `UTsnStanceObstacleComponent` 必须支持“跟随插件默认值 / 局部 override”的解析路径
+- NavModifier 与 `TsnStanceRepulsionSubsystem` 的运行时输入必须基于 resolved 值，而不是直接读取原始字段
 
 **关联能力**：`stance-repulsion-subsystem`（被注册/注销）、`nav-area-stance-unit`（NavArea 类选择）、`tactical-movement-component`（RVO 已在其构造函数中自动关闭；本组件不再承担额外的 RVO 二次确认职责）
+
+#### Scenario: 默认配置直接来自插件 DeveloperSettings
+
+**Given** 一个单位挂载了 `UTsnStanceObstacleComponent`，且该组件未显式 override `ObstacleRadius` / `RepulsionRadius` 等参数  
+**When** 它进入运行时初始化、进入站姿模式或刷新参数  
+**Then** 它必须解析并使用 TSN 插件 `DeveloperSettings` 中的默认几何值
+
+#### Scenario: 特殊单位可以局部 override 插件默认值
+
+**Given** TSN 插件 `DeveloperSettings` 已配置默认 `ObstacleRadius = 90`  
+  某个特殊单位的 `UTsnStanceObstacleComponent` 显式 override 为 `ObstacleRadius = 110`  
+**When** 该单位进入站姿模式或调用 `UpdateStanceUnitParams()`  
+**Then** 该单位必须优先使用自己的 override 值，而不是回退到插件默认值
+
+#### Scenario: Debug 读取与运行时子系统看到同一套 resolved 值
+
+**Given** 一个单位部分参数跟随插件默认值，部分参数使用局部 override  
+**When** 调用 `GetDebugRadii()`、`UpdateStanceUnitParams()` 或 `EnterStanceMode()`  
+**Then** NavModifier、RepulsionSubsystem 与调试接口必须基于同一套 resolved + sanitized 半径工作，而不是分别读取不同原始字段
 
 #### Scenario: EnterStanceMode 幂等——重复调用无副作用
 
@@ -47,89 +67,6 @@
 **Given** 单位已处于 Moving 状态（`CurrentMobilityStance == ETsnMobilityStance::Moving`）  
 **When** `ExitStanceMode()` 再次被调用  
 **Then** 立即 return，不重复执行任何系统操作
-
-#### Scenario: EnterStanceMode 触发三个系统变更
-
-**Given** 单位当前为 Moving 状态，`TsnStanceObstacleComponent` 已附加  
-**When** `EnterStanceMode()` 被调用  
-**Then**  
-  1. `CurrentMobilityStance = ETsnMobilityStance::Stance`  
-  2. `CrowdFollowingComp->SetCrowdSimulationState(ECrowdSimulationState::ObstacleOnly)` 执行  
-  3. 若 `bUseNavModifier == true`，NavModifier 被激活（清理挂起的延迟关闭 Timer 后设置 Navigation Relevancy）  
-  4. `TsnStanceRepulsionSubsystem::RegisterStanceUnit` 被调用，传入合法化后的 RepulsionRadius / RepulsionStrength / ObstacleRadius
-
-#### Scenario: BeginPlay 时按需预创建 NavModifier
-
-**Given** `bUseNavModifier == true`  
-**When** `BeginPlay` 执行  
-**Then** 组件先执行 `CacheComponents()`，再调用 `InitNavModifier()` 预创建 NavModifier，且其初始状态为关闭
-
-#### Scenario: 半径配置非法时运行时自动修正
-
-**Given** `ObstacleRadius = 80`，`RepulsionRadius = 60`  
-**When** `EnterStanceMode()` 被调用  
-**Then**  
-  1. 组件发出 ensure/warning，指出 `RepulsionRadius` 必须大于 `ObstacleRadius`  
-  2. 运行时使用 `EffectiveRepulsionRadius >= 110`（至少 `ObstacleRadius + 30`）继续执行  
-  3. NavModifier 与 `TsnStanceRepulsionSubsystem::RegisterStanceUnit` 都使用合法化后的 effective 半径
-
-#### Scenario: ExitStanceMode 延迟关闭 NavModifier
-
-**Given** 单位当前为 Stance 状态  
-**When** `ExitStanceMode()` 被调用  
-**Then**  
-  1. `CurrentMobilityStance = ETsnMobilityStance::Moving`  
-  2. `CrowdFollowingComp->SetCrowdSimulationState(ECrowdSimulationState::Enabled)` 立即执行  
-  3. NavModifier **不立即关闭**，而是设置 Timer（`NavModifierDeactivationDelay` 秒后执行 `DeactivateNavModifier`）  
-  4. `TsnStanceRepulsionSubsystem::UnregisterStanceUnit` 立即执行
-
-#### Scenario: Exit→Enter 快速切换时 Timer 竞态被正确处理
-
-**Given** 单位处于 Stance 状态，`ExitStanceMode()` 已调用且 NavModifier 延迟关闭 Timer 已挂起  
-  延迟关闭 Timer 尚未到期（例如 0.2s 后触发）  
-**When** 在 Timer 到期前再次调用 `EnterStanceMode()`  
-**Then**  
-  1. 幂等检查通过（`CurrentMobilityStance` 已被 Exit 设为 Moving）  
-  2. `ActivateNavModifier` 内部首行执行 `ClearTimer(NavModifierDeactivationTimer)`，取消挂起的延迟关闭  
-  3. NavModifier 被重新激活，不会被后续到期的 Timer 误关
-
-#### Scenario: BeginPlay 时 CrowdFollowingComponent 可能尚未可用
-
-**Given** AIController 在 BeginPlay 之后才 Possess Pawn  
-**When** `BeginPlay` 中调用 `CacheComponents`  
-**Then** `CrowdFollowingComp` 可能为 null（可接受）；`EnterStanceMode` 被调用时会再次调用 `CacheComponents` 补缓存
-
-#### Scenario: EndPlay 时自动清理注册状态
-
-**Given** 单位处于 Stance 状态时被销毁（EndPlay）  
-**When** `EndPlay` 触发  
-**Then** `TsnStanceRepulsionSubsystem::UnregisterStanceUnit` 被调用（**需 null-guard**：关卡拆除时 Subsystem 可能已先于组件销毁）；NavModifier 延迟 Timer 被清除
-
-#### Scenario: bUseNavModifier = false 时跳过 NavModifier 操作
-
-**Given** `bUseNavModifier == false`  
-**When** `EnterStanceMode` / `ExitStanceMode` 被调用  
-**Then** 不初始化也不操作 NavModifierComp，排斥力子系统注册/注销照常进行
-
-#### Scenario: AIController Unpossess 后 CrowdFollowingComponent 引用失效
-
-**Given** AI 在战斗中被 Unpossess（控制权切换），缓存的 `CrowdFollowingComp` 引用失效  
-**When** 随后尝试调用 `EnterStanceMode()` 或 `ExitStanceMode()`  
-**Then**  
-  1. `CacheComponents` 被重新调用，通过当前 AIController 查询 PathFollowingComponent  
-  2. 若 Unpossess 后无 AIController，`CrowdFollowingComp` 返回 null  
-  3. Crowd 状态切换步骤被跳过，其他步骤（NavModifier、RepulsionSubsystem）照常执行
-
-#### Scenario: OnOwnerReleased 对象池回收清理
-
-**Given** 宿主项目使用对象池管理单位，回收时调用 `OnOwnerReleased()`  
-**When** `OnOwnerReleased()` 执行  
-**Then**  
-  1. 若当前处于 Stance 状态，强制执行 `ExitStanceMode` 逻辑（注销 RepulsionSubsystem、恢复 Crowd 状态，并立即反激活 NavModifier）  
-  2. 清除 NavModifier 延迟关闭 Timer  
-  3. 下次重新激活时通过 `EnterStanceMode` 正常流程重新注册
-
----
 
 ### Requirement: 系统 SHALL 新增 UpdateStanceUnitParams 运行时参数更新接口
 

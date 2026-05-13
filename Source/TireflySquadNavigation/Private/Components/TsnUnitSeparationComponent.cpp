@@ -3,7 +3,6 @@
 #include "Components/TsnUnitSeparationComponent.h"
 #include "Components/TsnStanceObstacleComponent.h"
 #include "Subsystems/TsnStanceRepulsionSubsystem.h"
-#include "DrawDebugHelpers.h"
 
 UTsnUnitSeparationComponent::UTsnUnitSeparationComponent()
 {
@@ -108,27 +107,6 @@ void UTsnUnitSeparationComponent::TickComponent(
 		// 在其自己的 TickComponent 中完成，与本组件的 30Hz tick 间隔无关。
 		// 因此 30Hz → 60Hz 帧率变化不会导致分离力脉冲放大或缩小。
 		MyPawn->AddMovementInput(AdjustedSeparation.GetSafeNormal2D(), SeparationStrength);
-
-#if ENABLE_DRAW_DEBUG
-		if (bDrawDebugSeparation)
-		{
-			FVector Base = MyPawn->GetActorLocation();
-			// 裁剪后的最终分离方向（绿色）
-			DrawDebugDirectionalArrow(
-				GetWorld(), Base,
-				Base + AdjustedSeparation.GetSafeNormal2D() * 80.f,
-				20.f, FColor::Green, false, -1.f, 0, 2.f);
-			// 裁剪前的原始分离方向（如有裁剪，显示为蓝色对比）
-			FVector RawDir = SeparationDir.GetSafeNormal2D();
-			if (!RawDir.IsNearlyZero() && !RawDir.Equals(AdjustedSeparation.GetSafeNormal2D(), 0.1f))
-			{
-				DrawDebugDirectionalArrow(
-					GetWorld(), Base,
-					Base + RawDir * 80.f,
-					20.f, FColor::Blue, false, -1.f, 0, 1.f);
-			}
-		}
-#endif
 	}
 }
 

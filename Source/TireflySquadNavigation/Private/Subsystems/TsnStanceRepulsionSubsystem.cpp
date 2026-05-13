@@ -5,17 +5,6 @@
 #include "Components/TsnTacticalMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
-#include "DrawDebugHelpers.h"
-
-// 控制台变量：运行时切换排斥力调试可视化
-#if ENABLE_DRAW_DEBUG
-static bool GDrawDebugTsnRepulsion = false;
-static FAutoConsoleVariableRef CVarDrawDebugTsnRepulsion(
-	TEXT("tsn.debug.DrawRepulsion"),
-	GDrawDebugTsnRepulsion,
-	TEXT("1 = Draw TsnStanceRepulsionSubsystem area rings and repulsion force arrows (Development/Debug only)"),
-	ECVF_Default);
-#endif
 
 void UTsnStanceRepulsionSubsystem::RegisterStanceUnit(
 	AActor* Unit, float InRepulsionRadius, float InRepulsionStrength, float InNavModifierRadius)
@@ -84,23 +73,6 @@ void UTsnStanceRepulsionSubsystem::Tick(float DeltaTime)
 
 	UWorld* World = GetWorld();
 	if (!World) return;
-
-#if ENABLE_DRAW_DEBUG
-	if (bDrawDebugRepulsion || GDrawDebugTsnRepulsion)
-	{
-		for (const FTsnStanceObstacle& Obs : StanceUnits)
-		{
-			if (!Obs.Unit.IsValid()) continue;
-			FVector StanceLoc = Obs.Unit->GetActorLocation();
-			DrawDebugCircle(World, StanceLoc, Obs.NavModifierRadius, 32,
-				FColor::Red, false, -1.f, 0, 1.f,
-				FVector::RightVector, FVector::ForwardVector, false);
-			DrawDebugCircle(World, StanceLoc, Obs.RepulsionRadius, 32,
-				FColor::Yellow, false, -1.f, 0, 1.f,
-				FVector::RightVector, FVector::ForwardVector, false);
-		}
-	}
-#endif
 
 	// 清理失效的移动单位
 	MovingUnits.RemoveAll([](const TWeakObjectPtr<AActor>& Ptr) { return !Ptr.IsValid(); });
@@ -198,17 +170,6 @@ void UTsnStanceRepulsionSubsystem::Tick(float DeltaTime)
 		{
 			// 通过合法接口注入，不直接修改 Velocity
 			MoveComp->SetRepulsionVelocity(TotalRepulsion * DeltaTime);
-
-#if ENABLE_DRAW_DEBUG
-			if (bDrawDebugRepulsion || GDrawDebugTsnRepulsion)
-			{
-				DrawDebugDirectionalArrow(
-					World,
-					MovingActor->GetActorLocation(),
-					MovingActor->GetActorLocation() + TotalRepulsion.GetSafeNormal() * 80.f,
-					20.f, FColor::Orange, false, -1.f, 0, 2.f);
-			}
-#endif
 		}
 	}
 }

@@ -89,7 +89,12 @@ bool FTsnStanceAvoidanceTest::RunTest(const FString& Parameters)
 					Unit->TeamID = 0;
 					if (Unit->StanceObstacleComp)
 					{
-						ObstacleRadius = Unit->StanceObstacleComp->ObstacleRadius;
+						float NavModifierRadius = 0.f;
+						float RepulsionRadius = 0.f;
+						Unit->StanceObstacleComp->GetDebugRadii(
+							ObstacleRadius,
+							NavModifierRadius,
+							RepulsionRadius);
 						Unit->StanceObstacleComp->EnterStanceMode();
 					}
 					StanceUnits.Add(Unit);

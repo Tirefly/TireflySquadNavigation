@@ -294,6 +294,51 @@ void UTsnEngagementSlotComponent::OnOwnerReleased()
 	Slots.Empty();
 }
 
+bool UTsnEngagementSlotComponent::TryGetAssignedSlotInfo(
+	AActor* Requester,
+	FTsnEngagementSlotInfo& OutSlotInfo,
+	FVector& OutWorldPosition) const
+{
+	OutSlotInfo = FTsnEngagementSlotInfo();
+	OutWorldPosition = FVector::ZeroVector;
+
+	if (!Requester)
+	{
+		return false;
+	}
+
+	for (const FTsnEngagementSlotInfo& Slot : Slots)
+	{
+		if (Slot.Occupant == Requester && Slot.Occupant.IsValid())
+		{
+			OutSlotInfo = Slot;
+			OutWorldPosition = CalculateWorldPosition(Slot.AngleDeg, Slot.Radius);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void UTsnEngagementSlotComponent::GetAssignedSlots(
+	TArray<FTsnEngagementSlotInfo>& OutSlots) const
+{
+	OutSlots.Reset();
+	for (const FTsnEngagementSlotInfo& Slot : Slots)
+	{
+		if (Slot.Occupant.IsValid())
+		{
+			OutSlots.Add(Slot);
+		}
+	}
+}
+
+FVector UTsnEngagementSlotComponent::GetSlotWorldPosition(
+	const FTsnEngagementSlotInfo& SlotInfo) const
+{
+	return CalculateWorldPosition(SlotInfo.AngleDeg, SlotInfo.Radius);
+}
+
 FTsnEngagementSlotInfo* UTsnEngagementSlotComponent::FindExistingSlot(AActor* Requester)
 {
 	for (FTsnEngagementSlotInfo& Slot : Slots)

@@ -125,10 +125,6 @@ public:
 		meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TangentSideDeadZone = 0.15f;
 
-	/** 是否绘制排斥力调试信息 */
-	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Debug")
-	bool bDrawDebugRepulsion = false;
-
 	/**
 	 * 运行时更新已注册站姿单位的参数。
 	 *

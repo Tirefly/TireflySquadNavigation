@@ -56,8 +56,6 @@ public partial class UTsnTacticalMovementComponent : UnrealSharp.Engine.UCharact
         EscapeModeClearFrames_Offset = CallGetPropertyOffset(EscapeModeClearFrames_NativeProperty);
         IntPtr EscapeModeTangentCarryRatio_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "EscapeModeTangentCarryRatio");
         EscapeModeTangentCarryRatio_Offset = CallGetPropertyOffset(EscapeModeTangentCarryRatio_NativeProperty);
-        IntPtr bDrawDebugRepulsion_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "bDrawDebugRepulsion");
-        bDrawDebugRepulsion_Offset = CallGetPropertyOffset(bDrawDebugRepulsion_NativeProperty);
         IntPtr StationaryLogThreshold_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "StationaryLogThreshold");
         StationaryLogThreshold_Offset = CallGetPropertyOffset(StationaryLogThreshold_NativeProperty);
         IntPtr StationaryLogSpeedThreshold_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "StationaryLogSpeedThreshold");
@@ -347,25 +345,6 @@ public partial class UTsnTacticalMovementComponent : UnrealSharp.Engine.UCharact
         set
         {
             BlittableMarshaller<float>.ToNative(NativeObject + EscapeModeTangentCarryRatio_Offset, 0, value);
-        }
-    }
-    
-    
-    static int bDrawDebugRepulsion_Offset;
-    
-    /// <summary>
-    /// 是否绘制每帧的路径速度、排斥速度与最终速度向量。
-    /// 在 Shipping 配置中此属性仍存在，但实际绘制代码不会编译进去。
-    /// </summary>
-    public bool DrawDebugRepulsion
-    {
-        get
-        {
-            return BoolMarshaller.FromNative(NativeObject + bDrawDebugRepulsion_Offset, 0);
-        }
-        set
-        {
-            BoolMarshaller.ToNative(NativeObject + bDrawDebugRepulsion_Offset, 0, value);
         }
     }
     

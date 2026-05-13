@@ -21,6 +21,8 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static readonly IntPtr NativeClassPtr = UCoreUObjectExporter.CallGetType(typeof(UTsnStanceObstacleComponent).GetAssemblyName(), "UnrealSharp.TireflySquadNavigation", "TsnStanceObstacleComponent");
     static UTsnStanceObstacleComponent()
     {
+        IntPtr bOverrideTsnDefaults_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "bOverrideTsnDefaults");
+        bOverrideTsnDefaults_Offset = CallGetPropertyOffset(bOverrideTsnDefaults_NativeProperty);
         IntPtr ObstacleRadius_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "ObstacleRadius");
         ObstacleRadius_Offset = CallGetPropertyOffset(ObstacleRadius_NativeProperty);
         IntPtr bUseNavModifier_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "bUseNavModifier");
@@ -35,8 +37,6 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
         RepulsionStrength_Offset = CallGetPropertyOffset(RepulsionStrength_NativeProperty);
         IntPtr NavModifierDeactivationDelay_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "NavModifierDeactivationDelay");
         NavModifierDeactivationDelay_Offset = CallGetPropertyOffset(NavModifierDeactivationDelay_NativeProperty);
-        IntPtr bDrawDebugObstacle_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "bDrawDebugObstacle");
-        bDrawDebugObstacle_Offset = CallGetPropertyOffset(bDrawDebugObstacle_NativeProperty);
         IntPtr NavModifierComp_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "NavModifierComp");
         NavModifierComp_Offset = CallGetPropertyOffset(NavModifierComp_NativeProperty);
         IntPtr CrowdFollowingComp_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "CrowdFollowingComp");
@@ -50,11 +50,29 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
         OnOwnerReleased_NativeFunction = UClassExporter.CallGetNativeFunctionFromClassAndName(NativeClassPtr, "OnOwnerReleased");
     }
     
+    static int bOverrideTsnDefaults_Offset;
+    
+    /// <summary>
+    /// 是否改为使用当前组件的本地 override，而不是跟随 TSN 插件默认值。
+    /// </summary>
+    public bool OverrideTsnDefaults
+    {
+        get
+        {
+            return BoolMarshaller.FromNative(NativeObject + bOverrideTsnDefaults_Offset, 0);
+        }
+        set
+        {
+            BoolMarshaller.ToNative(NativeObject + bOverrideTsnDefaults_Offset, 0, value);
+        }
+    }
+    
+    
     static int ObstacleRadius_Offset;
     
     /// <summary>
-    /// NavModifier 障碍半径（同时作为排斥力双阶段分界线）。
-    /// 建议设为角色碰撞胶囊半径 × 1.2~1.5。
+    /// 本地 override 的 NavModifier 障碍半径（同时作为排斥力双阶段分界线）。
+    /// 仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public float ObstacleRadius
     {
@@ -72,7 +90,7 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static int bUseNavModifier_Offset;
     
     /// <summary>
-    /// 是否使用 NavModifier 影响路径规划
+    /// 本地 override 的 NavModifier 开关。仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public bool UseNavModifier
     {
@@ -90,7 +108,7 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static int NavModifierMode_Offset;
     
     /// <summary>
-    /// NavModifier 区域策略
+    /// 本地 override 的 NavModifier 区域策略。仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public UnrealSharp.TireflySquadNavigation.ETsnNavModifierMode NavModifierMode
     {
@@ -108,9 +126,9 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static int NavModifierExtraRadius_Offset;
     
     /// <summary>
-    /// 额外放大的导航影响半径。
+    /// 本地 override 的额外导航放大半径。
     /// 仅作用于 NavModifier 的面积，用于让路径规划更早把站桩单位视为绕行障碍，
-    /// 不改变排斥力内层边界本身。
+    /// 不改变排斥力内层边界本身。仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public float NavModifierExtraRadius
     {
@@ -128,8 +146,8 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static int RepulsionRadius_Offset;
     
     /// <summary>
-    /// 排斥力作用半径（必须大于 ObstacleRadius）。
-    /// 推荐落在 ObstacleRadius × 1.5~2.5。
+    /// 本地 override 的排斥力作用半径（必须大于 ObstacleRadius）。
+    /// 仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public float RepulsionRadius
     {
@@ -147,7 +165,7 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static int RepulsionStrength_Offset;
     
     /// <summary>
-    /// 排斥力强度
+    /// 本地 override 的排斥力强度。仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public float RepulsionStrength
     {
@@ -165,7 +183,7 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
     static int NavModifierDeactivationDelay_Offset;
     
     /// <summary>
-    /// 退出站姿模式时，延迟多久关闭 NavModifier
+    /// 本地 override 的 NavModifier 延迟关闭时间。仅在 `bOverrideTsnDefaults = true` 时生效。
     /// </summary>
     public float NavModifierDeactivationDelay
     {
@@ -176,25 +194,6 @@ public partial class UTsnStanceObstacleComponent : UnrealSharp.Engine.UActorComp
         set
         {
             BlittableMarshaller<float>.ToNative(NativeObject + NavModifierDeactivationDelay_Offset, 0, value);
-        }
-    }
-    
-    
-    static int bDrawDebugObstacle_Offset;
-    
-    /// <summary>
-    /// 是否绘制当前单位的 ObstacleRadius、NavModifier 半径和 RepulsionRadius。
-    /// 适合直接在 PIE 中观察哪些单位仍把窄缝当成可通行。
-    /// </summary>
-    public bool DrawDebugObstacle
-    {
-        get
-        {
-            return BoolMarshaller.FromNative(NativeObject + bDrawDebugObstacle_Offset, 0);
-        }
-        set
-        {
-            BoolMarshaller.ToNative(NativeObject + bDrawDebugObstacle_Offset, 0, value);
         }
     }
     

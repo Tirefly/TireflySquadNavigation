@@ -159,13 +159,6 @@ public:
 	float EscapeModeTangentCarryRatio = 0.35f;
 
 	/**
-	 * 是否绘制每帧的路径速度、排斥速度与最终速度向量。
-	 * 在 Shipping 配置中此属性仍存在，但实际绘制代码不会编译进去。
-	 */
-	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Debug")
-	bool bDrawDebugRepulsion = false;
-
-	/**
 	 * 单位持续静止多久后输出一次诊断日志（秒）。
 	 * 用于定位“任务仍在跑，但单位原地不动”的根因。
 	 */

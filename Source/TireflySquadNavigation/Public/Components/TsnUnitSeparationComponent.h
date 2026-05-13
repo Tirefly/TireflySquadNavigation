@@ -53,13 +53,6 @@ public:
 	float SeparationStrength = 0.5f;
 
 	/**
-	 * 是否绘制分离力调试信息：分离力方向 + Stance 约束裁剪后的最终方向（箭头）。
-	 * 在 Shipping 配置中此属性仍存在，但实际绘制代码不会编译进去。
-	 */
-	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Debug")
-	bool bDrawDebugSeparation = false;
-
-	/**
 	 * 对象池回收时由宿主调用——停止 Tick 并清空运行时状态，
 	 * 配合 Deactivate() 使用，避免对象池中休眠组件仍参与计算。
 	 */

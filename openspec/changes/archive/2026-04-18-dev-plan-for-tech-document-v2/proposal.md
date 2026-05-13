@@ -57,7 +57,7 @@
 12. **BT 节点不使用 FallbackEngagementRange**：当 Pawn 未实现 `ITsnTacticalUnit` 或接口返回非法值（≤ 0）时，BT Task 直接返回 `Failed`，由 BT 树结构的失败分支处理恢复逻辑。
 13. **TsnStanceObstacleComponent 提供 UpdateStanceUnitParams() 运行时更新接口**：宿主项目可在运行时修改 ObstacleRadius / RepulsionRadius / RepulsionStrength 后调用此方法，同步更新 NavModifier 和 RepulsionSubsystem 中缓存的参数。
 14. **MoveToEngagementSlot 支持对象池回收场景**：除 `OnDestroyed` 外，额外监听 `OnEndPlay`，确保目标被对象池回收（SetActorHiddenInGame + 禁用碰撞而非真正销毁）时也能正确释放槽位并结束任务。
-15. **排斥力与分离力系统提供 `#if ENABLE_DRAW_DEBUG` 调试可视化**：RepulsionSubsystem、TacticalMovementComponent、UnitSeparationComponent 均包含调试绘制支持，方便运行时参数调优。
+15. **排斥力与分离力系统提供 `#if ENABLE_DRAW_DEBUG` 调试可视化**：这是 V2 归档方案中的 raw debug 设计记录，当时 RepulsionSubsystem、TacticalMovementComponent、UnitSeparationComponent 均包含各自的调试绘制入口，方便运行时参数调优。当前插件运行时调试已统一收敛到 `UTsnDebugDrawSubsystem`。
 16. **单目标槽位约束**：同一攻击者同一时间只能在一个目标上持有槽位。通过 `UTsnEngagementSlotSubsystem`（`UWorldSubsystem`）维护全局 `Requester → SlotComponent` 映射。`RequestSlot` 内部查询子系统，若请求者已在其他目标上持有槽位，自动释放旧槽位后再分配新槽位。
 17. **Stance 状态下不重新申请槽位**：攻击者进入 Stance（站桩攻击）后，除非目标死亡或自身受到强制切换目标的控制效果（如魅惑、嘲讽），否则不应重新触发 `RequestSlot`。BT 树结构负责保证此约束。
 18. **ObstacleRadius 编辑器约束**：`TsnStanceObstacleComponent` 的 `ObstacleRadius` 默认值为 `60.f`（约等于标准胶囊体半径），并添加 `ClampMin = "10.0"` 元数据，防止配置为零或负值。`RepulsionRadius` 默认值为 `120.f`，添加 `ClampMin = "20.0"`。

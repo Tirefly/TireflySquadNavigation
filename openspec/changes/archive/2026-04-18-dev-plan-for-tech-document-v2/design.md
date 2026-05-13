@@ -378,6 +378,8 @@ Plugins/TireflySquadNavigation/Source/TireflySquadNavigation/
 
 ### 17. 调试可视化策略
 
+> 归档说明（2026-05）：本节记录的是 V2 阶段的 raw debug 设计假设。当前插件已移除 `bDrawDebugRepulsion`、`bDrawDebugSeparation`、`tsn.debug.DrawRepulsion` 这类分散的运行时调试入口，统一收敛到 `UTsnDebugDrawSubsystem` 与 `tsn.debug.DrawUnitOverlay*` 控制面。
+
 当前只有 `TsnEngagementSlotComponent` 包含 `#if ENABLE_DRAW_DEBUG` 绘制。以下系统需要补充调试绘制支持：
 
 | 系统 | 绘制内容 |

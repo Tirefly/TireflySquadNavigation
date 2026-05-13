@@ -75,6 +75,8 @@
 
 #### Scenario: 调试可视化（仅 Debug/Development）
 
+> 归档说明（2026-05）：本场景记录的是 V2 方案中的组件级 raw debug 约定。当前插件运行时调试已统一收敛到 `UTsnDebugDrawSubsystem`，`bDrawDebugRepulsion` 不再是现行正式契约的一部分。
+
 **Given** `bDrawDebugRepulsion == true` 且构建配置包含 `ENABLE_DRAW_DEBUG`  
 **When** `CalcVelocity` 消费排斥力  
 **Then** 在单位位置绘制排斥力方向箭头，颜色区分内层（红）和外层（黄）

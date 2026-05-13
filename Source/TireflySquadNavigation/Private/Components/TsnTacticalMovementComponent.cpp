@@ -9,7 +9,6 @@
 #include "Interfaces/ITsnTacticalUnit.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "TsnLog.h"
-#include "DrawDebugHelpers.h"
 
 UTsnTacticalMovementComponent::UTsnTacticalMovementComponent()
 {
@@ -315,17 +314,6 @@ void UTsnTacticalMovementComponent::UpdateEscapeMode(float DeltaTime)
 			Velocity.Y = CachedEscapeVelocity.Y;
 		}
 
-#if ENABLE_DRAW_DEBUG
-		if (bDrawDebugRepulsion && GetOwner() && !CachedEscapeVelocity.IsNearlyZero())
-		{
-			const FVector Base = GetOwner()->GetActorLocation();
-			DrawDebugDirectionalArrow(
-				GetWorld(), Base,
-				Base + CachedEscapeVelocity.GetClampedToMaxSize(100.f),
-				20.f, FColor::Magenta, false, -1.f, 0, 3.f);
-		}
-#endif
-
 		if (!bLastFrameInsideEscapeReleaseZone && EscapeModeTimeRemaining <= 0.f)
 		{
 			++EscapeModeClearFrameCount;
@@ -382,17 +370,6 @@ void UTsnTacticalMovementComponent::UpdateEscapeMode(float DeltaTime)
 				FVector(Velocity.X, Velocity.Y, 0.f).Size(),
 				RecentRepulsion2D.Size(),
 				bLastFrameInsideEscapeEnterZone ? TEXT("true") : TEXT("false"));
-
-#if ENABLE_DRAW_DEBUG
-			if (bDrawDebugRepulsion && GetOwner() && !CachedEscapeVelocity.IsNearlyZero())
-			{
-				const FVector Base = GetOwner()->GetActorLocation();
-				DrawDebugDirectionalArrow(
-					GetWorld(), Base,
-					Base + CachedEscapeVelocity.GetClampedToMaxSize(100.f),
-					20.f, FColor::Magenta, false, -1.f, 0, 3.f);
-			}
-#endif
 		}
 	}
 	else
@@ -516,25 +493,6 @@ void UTsnTacticalMovementComponent::CalcVelocity(
 			Velocity = Velocity.GetSafeNormal2D() * SpeedCap
 				+ FVector(0.f, 0.f, Velocity.Z);
 		}
-
-#if ENABLE_DRAW_DEBUG
-		if (bDrawDebugRepulsion && GetOwner())
-		{
-			FVector Base = GetOwner()->GetActorLocation();
-			DrawDebugDirectionalArrow(
-				GetWorld(), Base,
-				Base + BaseVelocity2D.GetClampedToMaxSize(100.f),
-				20.f, FColor::Cyan, false, -1.f, 0, 1.5f);
-			DrawDebugDirectionalArrow(
-				GetWorld(), Base,
-				Base + ClampedRepulsion.GetClampedToMaxSize(100.f),
-				20.f, FColor::Orange, false, -1.f, 0, 2.f);
-			DrawDebugDirectionalArrow(
-				GetWorld(), Base,
-				Base + FVector(Velocity.X, Velocity.Y, 0.f).GetClampedToMaxSize(100.f),
-				20.f, FColor::Green, false, -1.f, 0, 2.5f);
-		}
-#endif
 
 		ConsumeDeferredRepulsion();
 	}
