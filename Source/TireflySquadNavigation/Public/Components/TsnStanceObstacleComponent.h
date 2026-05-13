@@ -57,17 +57,6 @@ public:
 	UTsnStanceObstacleComponent();
 
 	virtual void BeginPlay() override;
-	/**
-	 * 每帧绘制站姿障碍调试信息（受调试开关门控）。
-	 *
-	 * @param DeltaTime         当前帧时间
-	 * @param TickType          Tick 类型
-	 * @param ThisTickFunction  当前组件 Tick 函数上下文
-	 */
-	virtual void TickComponent(
-		float DeltaTime,
-		enum ELevelTick TickType,
-		FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** 进入站姿模式（幂等） */
@@ -101,57 +90,120 @@ public:
 	ETsnMobilityStance GetMobilityStance() const { return CurrentMobilityStance; }
 
 	/**
-	 * NavModifier 障碍半径（同时作为排斥力双阶段分界线）。
-	 * 建议设为角色碰撞胶囊半径 × 1.2~1.5。
+	 * 获取当前单位实际生效的 TSN 三层半径。
+	 * 该接口只读现有配置与合法化结果，不会改变运行时状态。
+	 *
+	 * @param OutObstacleRadius      站姿障碍内层半径
+	 * @param OutNavModifierRadius   导航绕行层半径
+	 * @param OutRepulsionRadius     外层排斥半径
+	 */
+	void GetDebugRadii(
+		float& OutObstacleRadius,
+		float& OutNavModifierRadius,
+		float& OutRepulsionRadius) const;
+
+	/**
+	 * 获取当前 Crowd agent 的调试碰撞信息。
+	 * 该接口用于统一 overlay 读取 Crowd 半径与查询范围，不改变 Crowd 运行时状态。
+	 *
+	 * @param OutAgentRadius          Crowd agent 半径
+	 * @param OutAgentHalfHeight      Crowd agent 半高
+	 * @param OutCollisionQueryRange  Crowd 查询范围
+	 * @return true 表示成功读取到 CrowdFollowingComponent 的调试数据
+	 */
+	bool GetCrowdDebugInfo(
+		float& OutAgentRadius,
+		float& OutAgentHalfHeight,
+		float& OutCollisionQueryRange) const;
+
+	/**
+	 * 获取当前 NavModifier 的调试状态。
+	 * 该接口只读当前配置和组件状态，不会改变运行时行为。
+	 *
+	 * @param OutUsesNavModifier   是否启用 NavModifier 能力
+	 * @param OutNavModifierActive 当前 NavModifier 是否处于激活状态
+	 * @param OutNavModifierMode   当前 NavModifier 的区域策略
+	 */
+	void GetDebugNavModifierState(
+		bool& OutUsesNavModifier,
+		bool& OutNavModifierActive,
+		ETsnNavModifierMode& OutNavModifierMode) const;
+
+	/** 是否改为使用当前组件的本地 override，而不是跟随 TSN 插件默认值。 */
+	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Defaults")
+	bool bOverrideTsnDefaults = false;
+
+	/**
+	 * 本地 override 的 NavModifier 障碍半径（同时作为排斥力双阶段分界线）。
+	 * 仅在 `bOverrideTsnDefaults = true` 时生效。
 	 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|NavModifier",
-		meta = (ClampMin = "10.0"))
+		meta = (ClampMin = "10.0", EditCondition = "bOverrideTsnDefaults"))
 	float ObstacleRadius = 60.f;
 
-	/** 是否使用 NavModifier 影响路径规划 */
-	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|NavModifier")
+	/** 本地 override 的 NavModifier 开关。仅在 `bOverrideTsnDefaults = true` 时生效。 */
+	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|NavModifier",
+		meta = (EditCondition = "bOverrideTsnDefaults"))
 	bool bUseNavModifier = true;
 
-	/** NavModifier 区域策略 */
+	/** 本地 override 的 NavModifier 区域策略。仅在 `bOverrideTsnDefaults = true` 时生效。 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|NavModifier",
-		meta = (EditCondition = "bUseNavModifier"))
+		meta = (EditCondition = "bOverrideTsnDefaults && bUseNavModifier"))
 	ETsnNavModifierMode NavModifierMode = ETsnNavModifierMode::Impassable;
 
 	/**
-	 * 额外放大的导航影响半径。
+	 * 本地 override 的额外导航放大半径。
 	 * 仅作用于 NavModifier 的面积，用于让路径规划更早把站桩单位视为绕行障碍，
-	 * 不改变排斥力内层边界本身。
+	 * 不改变排斥力内层边界本身。仅在 `bOverrideTsnDefaults = true` 时生效。
 	 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|NavModifier",
-		meta = (ClampMin = "0.0", EditCondition = "bUseNavModifier"))
+		meta = (ClampMin = "0.0", EditCondition = "bOverrideTsnDefaults && bUseNavModifier"))
 	float NavModifierExtraRadius = 45.f;
 
 	/**
-	 * 排斥力作用半径（必须大于 ObstacleRadius）。
-	 * 推荐落在 ObstacleRadius × 1.5~2.5。
+	 * 本地 override 的排斥力作用半径（必须大于 ObstacleRadius）。
+	 * 仅在 `bOverrideTsnDefaults = true` 时生效。
 	 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Repulsion",
-		meta = (ClampMin = "10.0"))
+		meta = (ClampMin = "10.0", EditCondition = "bOverrideTsnDefaults"))
 	float RepulsionRadius = 150.f;
 
-	/** 排斥力强度 */
+	/** 本地 override 的排斥力强度。仅在 `bOverrideTsnDefaults = true` 时生效。 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Repulsion",
-		meta = (ClampMin = "0.0"))
+		meta = (ClampMin = "0.0", EditCondition = "bOverrideTsnDefaults"))
 	float RepulsionStrength = 800.f;
 
-	/** 退出站姿模式时，延迟多久关闭 NavModifier */
+	/** 本地 override 的 NavModifier 延迟关闭时间。仅在 `bOverrideTsnDefaults = true` 时生效。 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|NavModifier",
-		meta = (ClampMin = "0.0"))
+		meta = (ClampMin = "0.0", EditCondition = "bOverrideTsnDefaults && bUseNavModifier"))
 	float NavModifierDeactivationDelay = 0.3f;
 
-	/**
-	 * 是否绘制当前单位的 ObstacleRadius、NavModifier 半径和 RepulsionRadius。
-	 * 适合直接在 PIE 中观察哪些单位仍把窄缝当成可通行。
-	 */
-	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Debug")
-	bool bDrawDebugObstacle = false;
-
 private:
+	/** 当前最终生效的 stance obstacle 配置。 */
+	struct FTsnResolvedStanceObstacleSettings
+	{
+		/** 是否启用 NavModifier。 */
+		bool bUseNavModifier = true;
+
+		/** NavModifier 区域策略。 */
+		ETsnNavModifierMode NavModifierMode = ETsnNavModifierMode::Impassable;
+
+		/** 站姿障碍半径。 */
+		float ObstacleRadius = 60.f;
+
+		/** 导航外扩半径。 */
+		float NavModifierExtraRadius = 45.f;
+
+		/** 排斥感知半径。 */
+		float RepulsionRadius = 150.f;
+
+		/** 排斥力强度。 */
+		float RepulsionStrength = 800.f;
+
+		/** NavModifier 延迟关闭时间。 */
+		float NavModifierDeactivationDelay = 0.3f;
+	};
+
 	ETsnMobilityStance CurrentMobilityStance = ETsnMobilityStance::Moving;
 
 	UPROPERTY()
@@ -165,33 +217,42 @@ private:
 	/** 对象池回收进行中标志，使 ExitStanceMode 跳过延迟定时器 */
 	bool bIsReleasingOwner = false;
 
-	/** 对 ObstacleRadius / RepulsionRadius 做运行时合法化 */
-	void GetSanitizedRadii(float& OutObstacleRadius, float& OutRepulsionRadius) const;
+	/** 解析当前最终生效的 stance obstacle 设置。 */
+	void GetResolvedSettings(FTsnResolvedStanceObstacleSettings& OutResolvedSettings) const;
+
+	/** 对 resolved 的 ObstacleRadius / RepulsionRadius 做运行时合法化。 */
+	void GetSanitizedRadii(
+		const FTsnResolvedStanceObstacleSettings& ResolvedSettings,
+		float& OutObstacleRadius,
+		float& OutRepulsionRadius) const;
 
 	/**
 	 * 获取实际写入 NavModifier 的半径。
 	 * 在 ObstacleRadius 基础上叠加额外导航放大值，使寻路层更早绕开过窄缝隙。
 	 *
+	 * @param ResolvedSettings       当前最终生效的 stance obstacle 设置
 	 * @param SanitizedObstacleRadius 已合法化后的障碍半径
 	 * @return 实际用于 NavModifier 的影响半径
 	 */
-	float GetEffectiveNavModifierRadius(float SanitizedObstacleRadius) const;
+	float GetEffectiveNavModifierRadius(
+		const FTsnResolvedStanceObstacleSettings& ResolvedSettings,
+		float SanitizedObstacleRadius) const;
 
-	/** BeginPlay 时预创建 NavModifier，初始状态关闭 */
-	void InitNavModifier();
+	/** BeginPlay 或运行时切换时预创建 NavModifier，初始状态关闭。 */
+	void InitNavModifier(const FTsnResolvedStanceObstacleSettings& ResolvedSettings);
 
-	/** 开启 NavModifier */
-	void ActivateNavModifier();
+	/** 将当前 resolved 设置同步到 NavModifier。 */
+	void SyncNavModifierConfig(const FTsnResolvedStanceObstacleSettings& ResolvedSettings);
 
-	/** 关闭 NavModifier */
+	/** 开启 NavModifier。 */
+	void ActivateNavModifier(const FTsnResolvedStanceObstacleSettings& ResolvedSettings);
+
+	/** 关闭 NavModifier。 */
 	void DeactivateNavModifier();
 
-	/** 根据 NavModifierMode 设置对应的 NavArea 类 */
-	void ApplyNavAreaClass();
+	/** 根据 NavModifierMode 设置对应的 NavArea 类。 */
+	void ApplyNavAreaClass(ETsnNavModifierMode InNavModifierMode);
 
-	/** 从 Controller 缓存 CrowdFollowingComponent */
+	/** 从 Controller 缓存 CrowdFollowingComponent。 */
 	void CacheComponents();
-
-	/** 绘制当前单位的障碍、导航影响区和状态标签 */
-	void DrawDebugObstacleState() const;
 };

@@ -94,6 +94,35 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "TireflySquadNavigation|ObjectPool")
 	void OnOwnerReleased();
 
+	/**
+	 * 读取指定请求者当前已经持有的槽位信息。
+	 * 该接口只读取现有占位，不会像 RequestSlot 一样触发重新认领。
+	 *
+	 * @param Requester          请求者 Actor
+	 * @param OutSlotInfo        当前槽位的本地极坐标信息
+	 * @param OutWorldPosition   当前帧换算出的槽位世界快照
+	 * @return true 表示请求者当前已持有槽位
+	 */
+	bool TryGetAssignedSlotInfo(
+		AActor* Requester,
+		FTsnEngagementSlotInfo& OutSlotInfo,
+		FVector& OutWorldPosition) const;
+
+	/**
+	 * 复制当前所有有效槽位信息，供统一调试 overlay 只读使用。
+	 *
+	 * @param OutSlots 输出的有效槽位数组
+	 */
+	void GetAssignedSlots(TArray<FTsnEngagementSlotInfo>& OutSlots) const;
+
+	/**
+	 * 将一个槽位信息转换为当前帧的世界空间位置。
+	 *
+	 * @param SlotInfo 要换算的槽位信息
+	 * @return 当前帧槽位世界快照
+	 */
+	FVector GetSlotWorldPosition(const FTsnEngagementSlotInfo& SlotInfo) const;
+
 	/** 最大同时攻击者数 */
 	UPROPERTY(EditAnywhere, Category = "TireflySquadNavigation|Slots",
 		meta = (ClampMin = "1"))

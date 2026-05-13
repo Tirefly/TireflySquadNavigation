@@ -29,8 +29,6 @@ public partial class UTsnStanceRepulsionSubsystem : UnrealSharp.Engine.UTickable
         TangentBlendRatio_Offset = CallGetPropertyOffset(TangentBlendRatio_NativeProperty);
         IntPtr TangentSideDeadZone_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "TangentSideDeadZone");
         TangentSideDeadZone_Offset = CallGetPropertyOffset(TangentSideDeadZone_NativeProperty);
-        IntPtr bDrawDebugRepulsion_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "bDrawDebugRepulsion");
-        bDrawDebugRepulsion_Offset = CallGetPropertyOffset(bDrawDebugRepulsion_NativeProperty);
         GetStanceUnitCount_NativeFunction = UClassExporter.CallGetNativeFunctionFromClassAndName(NativeClassPtr, "GetStanceUnitCount");
         GetStanceUnitCount_ParamsSize = UFunctionExporter.CallGetNativeFunctionParamsSize(GetStanceUnitCount_NativeFunction);
         GetStanceUnitCount_ReturnValue_Offset = CallGetPropertyOffsetFromName(GetStanceUnitCount_NativeFunction, "ReturnValue");
@@ -88,24 +86,6 @@ public partial class UTsnStanceRepulsionSubsystem : UnrealSharp.Engine.UTickable
         set
         {
             BlittableMarshaller<float>.ToNative(NativeObject + TangentSideDeadZone_Offset, 0, value);
-        }
-    }
-    
-    
-    static int bDrawDebugRepulsion_Offset;
-    
-    /// <summary>
-    /// 是否绘制排斥力调试信息
-    /// </summary>
-    public bool DrawDebugRepulsion
-    {
-        get
-        {
-            return BoolMarshaller.FromNative(NativeObject + bDrawDebugRepulsion_Offset, 0);
-        }
-        set
-        {
-            BoolMarshaller.ToNative(NativeObject + bDrawDebugRepulsion_Offset, 0, value);
         }
     }
     

@@ -100,6 +100,8 @@
 
 #### Scenario: 调试可视化绘制（仅 Debug/Development）
 
+> 归档说明（2026-05）：本场景记录的是 V2 方案中的 raw debug 约定。当前插件运行时调试已统一收敛到 `UTsnDebugDrawSubsystem`，这里的 `bDrawDebugRepulsion` 与 `tsn.debug.DrawRepulsion` 不再是现行正式契约。
+
 **Given** `bDrawDebugRepulsion == true` 且构建配置包含 `ENABLE_DRAW_DEBUG`  
 **When** Tick 执行  
 **Then** 为每个 Stance 单位绘制内层/外层圆环，为每个受影响的 Moving 单位绘制排斥力方向箭头

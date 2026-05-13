@@ -8,23 +8,13 @@
 #include "GameFramework/Pawn.h"
 #include "NavAreas/NavArea_Null.h"
 #include "NavAreas/TsnNavArea_StanceUnit.h"
+#include "Settings/TsnDeveloperSettings.h"
 #include "Subsystems/TsnStanceRepulsionSubsystem.h"
 #include "TsnLog.h"
-#include "DrawDebugHelpers.h"
-
-#if ENABLE_DRAW_DEBUG
-static bool GDrawDebugTsnStanceObstacle = false;
-static FAutoConsoleVariableRef CVarDrawDebugTsnStanceObstacle(
-	TEXT("tsn.debug.DrawStanceObstacle"),
-	GDrawDebugTsnStanceObstacle,
-	TEXT("1 = Draw TsnStanceObstacleComponent obstacle radius, nav modifier radius and state labels (Development/Debug only)"),
-	ECVF_Default);
-#endif
 
 UTsnStanceObstacleComponent::UTsnStanceObstacleComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = true;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UTsnStanceObstacleComponent::BeginPlay()
@@ -32,25 +22,13 @@ void UTsnStanceObstacleComponent::BeginPlay()
 	Super::BeginPlay();
 	CacheComponents();
 
-	if (bUseNavModifier)
-	{
-		InitNavModifier();
-	}
-}
+	FTsnResolvedStanceObstacleSettings ResolvedSettings;
+	GetResolvedSettings(ResolvedSettings);
 
-void UTsnStanceObstacleComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-#if ENABLE_DRAW_DEBUG
-	if (bDrawDebugObstacle || GDrawDebugTsnStanceObstacle)
+	if (ResolvedSettings.bUseNavModifier)
 	{
-		DrawDebugObstacleState();
+		InitNavModifier(ResolvedSettings);
 	}
-#endif
 }
 
 void UTsnStanceObstacleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -69,6 +47,34 @@ void UTsnStanceObstacleComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	Super::EndPlay(EndPlayReason);
 }
 
+void UTsnStanceObstacleComponent::GetResolvedSettings(
+	FTsnResolvedStanceObstacleSettings& OutResolvedSettings) const
+{
+	if (!bOverrideTsnDefaults)
+	{
+		if (const UTsnDeveloperSettings* Settings = UTsnDeveloperSettings::Get())
+		{
+			OutResolvedSettings.bUseNavModifier = Settings->GetDefaultUseNavModifier();
+			OutResolvedSettings.NavModifierMode = Settings->GetDefaultNavModifierMode();
+			OutResolvedSettings.ObstacleRadius = Settings->GetDefaultObstacleRadius();
+			OutResolvedSettings.NavModifierExtraRadius = Settings->GetDefaultNavModifierExtraRadius();
+			OutResolvedSettings.RepulsionRadius = Settings->GetDefaultRepulsionRadius();
+			OutResolvedSettings.RepulsionStrength = Settings->GetDefaultRepulsionStrength();
+			OutResolvedSettings.NavModifierDeactivationDelay =
+				Settings->GetDefaultNavModifierDeactivationDelay();
+			return;
+		}
+	}
+
+	OutResolvedSettings.bUseNavModifier = bUseNavModifier;
+	OutResolvedSettings.NavModifierMode = NavModifierMode;
+	OutResolvedSettings.ObstacleRadius = ObstacleRadius;
+	OutResolvedSettings.NavModifierExtraRadius = NavModifierExtraRadius;
+	OutResolvedSettings.RepulsionRadius = RepulsionRadius;
+	OutResolvedSettings.RepulsionStrength = RepulsionStrength;
+	OutResolvedSettings.NavModifierDeactivationDelay = NavModifierDeactivationDelay;
+}
+
 void UTsnStanceObstacleComponent::CacheComponents()
 {
 	if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
@@ -82,33 +88,95 @@ void UTsnStanceObstacleComponent::CacheComponents()
 }
 
 void UTsnStanceObstacleComponent::GetSanitizedRadii(
-	float& OutObstacleRadius, float& OutRepulsionRadius) const
+	const FTsnResolvedStanceObstacleSettings& ResolvedSettings,
+	float& OutObstacleRadius,
+	float& OutRepulsionRadius) const
 {
-	OutObstacleRadius = FMath::Max(ObstacleRadius, 10.f);
+	OutObstacleRadius = FMath::Max(ResolvedSettings.ObstacleRadius, 10.f);
 
-	const bool bValidOuterBand = RepulsionRadius > OutObstacleRadius;
+	const bool bValidOuterBand = ResolvedSettings.RepulsionRadius > OutObstacleRadius;
 	ensureMsgf(bValidOuterBand,
 		TEXT("TsnStanceObstacleComponent: RepulsionRadius (%.1f) must be > ObstacleRadius (%.1f)."),
-		RepulsionRadius, OutObstacleRadius);
+		ResolvedSettings.RepulsionRadius, OutObstacleRadius);
 
 	OutRepulsionRadius = bValidOuterBand
-		? RepulsionRadius
+		? ResolvedSettings.RepulsionRadius
 		: (OutObstacleRadius + 30.f);
 }
 
-float UTsnStanceObstacleComponent::GetEffectiveNavModifierRadius(
-	float SanitizedObstacleRadius) const
+void UTsnStanceObstacleComponent::GetDebugRadii(
+	float& OutObstacleRadius,
+	float& OutNavModifierRadius,
+	float& OutRepulsionRadius) const
 {
-	return SanitizedObstacleRadius + FMath::Max(NavModifierExtraRadius, 0.f);
+	FTsnResolvedStanceObstacleSettings ResolvedSettings;
+	GetResolvedSettings(ResolvedSettings);
+	GetSanitizedRadii(ResolvedSettings, OutObstacleRadius, OutRepulsionRadius);
+	OutNavModifierRadius = GetEffectiveNavModifierRadius(ResolvedSettings, OutObstacleRadius);
 }
 
-void UTsnStanceObstacleComponent::InitNavModifier()
+bool UTsnStanceObstacleComponent::GetCrowdDebugInfo(
+	float& OutAgentRadius,
+	float& OutAgentHalfHeight,
+	float& OutCollisionQueryRange) const
 {
+	OutAgentRadius = 0.f;
+	OutAgentHalfHeight = 0.f;
+	OutCollisionQueryRange = 0.f;
+
+	if (!CrowdFollowingComp)
+	{
+		const_cast<UTsnStanceObstacleComponent*>(this)->CacheComponents();
+	}
+
+	if (!CrowdFollowingComp)
+	{
+		return false;
+	}
+
+	CrowdFollowingComp->GetCrowdAgentCollisions(OutAgentRadius, OutAgentHalfHeight);
+	OutCollisionQueryRange = CrowdFollowingComp->GetCrowdCollisionQueryRange();
+	return true;
+}
+
+void UTsnStanceObstacleComponent::GetDebugNavModifierState(
+	bool& OutUsesNavModifier,
+	bool& OutNavModifierActive,
+	ETsnNavModifierMode& OutNavModifierMode) const
+{
+	FTsnResolvedStanceObstacleSettings ResolvedSettings;
+	GetResolvedSettings(ResolvedSettings);
+
+	OutUsesNavModifier = ResolvedSettings.bUseNavModifier;
+	OutNavModifierActive = ResolvedSettings.bUseNavModifier
+		&& NavModifierComp
+		&& NavModifierComp->IsNavigationRelevant();
+	OutNavModifierMode = ResolvedSettings.NavModifierMode;
+}
+
+float UTsnStanceObstacleComponent::GetEffectiveNavModifierRadius(
+	const FTsnResolvedStanceObstacleSettings& ResolvedSettings,
+	float SanitizedObstacleRadius) const
+{
+	return SanitizedObstacleRadius + FMath::Max(ResolvedSettings.NavModifierExtraRadius, 0.f);
+}
+
+void UTsnStanceObstacleComponent::InitNavModifier(
+	const FTsnResolvedStanceObstacleSettings& ResolvedSettings)
+{
+	if (NavModifierComp)
+	{
+		SyncNavModifierConfig(ResolvedSettings);
+		NavModifierComp->SetNavigationRelevancy(false);
+		return;
+	}
+
 	float EffectiveObstacleRadius = 0.f;
 	float IgnoredRepulsionRadius = 0.f;
-	GetSanitizedRadii(EffectiveObstacleRadius, IgnoredRepulsionRadius);
-	const float EffectiveNavModifierRadius =
-		GetEffectiveNavModifierRadius(EffectiveObstacleRadius);
+	GetSanitizedRadii(ResolvedSettings, EffectiveObstacleRadius, IgnoredRepulsionRadius);
+	const float EffectiveNavModifierRadius = GetEffectiveNavModifierRadius(
+		ResolvedSettings,
+		EffectiveObstacleRadius);
 
 	// 开关式：BeginPlay 预创建，初始状态关闭
 	NavModifierComp = NewObject<UNavModifierComponent>(
@@ -117,16 +185,37 @@ void UTsnStanceObstacleComponent::InitNavModifier()
 
 	NavModifierComp->FailsafeExtent =
 		FVector(EffectiveNavModifierRadius, EffectiveNavModifierRadius, 100.f);
-	ApplyNavAreaClass();
+	ApplyNavAreaClass(ResolvedSettings.NavModifierMode);
 	NavModifierComp->SetNavigationRelevancy(false);
 	NavModifierComp->RegisterComponent();
 }
 
-void UTsnStanceObstacleComponent::ApplyNavAreaClass()
+void UTsnStanceObstacleComponent::SyncNavModifierConfig(
+	const FTsnResolvedStanceObstacleSettings& ResolvedSettings)
+{
+	if (!NavModifierComp)
+	{
+		return;
+	}
+
+	float EffectiveObstacleRadius = 0.f;
+	float IgnoredRepulsionRadius = 0.f;
+	GetSanitizedRadii(ResolvedSettings, EffectiveObstacleRadius, IgnoredRepulsionRadius);
+	const float EffectiveNavModifierRadius = GetEffectiveNavModifierRadius(
+		ResolvedSettings,
+		EffectiveObstacleRadius);
+
+	NavModifierComp->FailsafeExtent =
+		FVector(EffectiveNavModifierRadius, EffectiveNavModifierRadius, 100.f);
+	ApplyNavAreaClass(ResolvedSettings.NavModifierMode);
+}
+
+void UTsnStanceObstacleComponent::ApplyNavAreaClass(
+	ETsnNavModifierMode InNavModifierMode)
 {
 	if (!NavModifierComp) return;
 
-	switch (NavModifierMode)
+	switch (InNavModifierMode)
 	{
 	case ETsnNavModifierMode::Impassable:
 		NavModifierComp->SetAreaClass(UNavArea_Null::StaticClass());
@@ -137,11 +226,14 @@ void UTsnStanceObstacleComponent::ApplyNavAreaClass()
 	}
 }
 
-void UTsnStanceObstacleComponent::ActivateNavModifier()
+void UTsnStanceObstacleComponent::ActivateNavModifier(
+	const FTsnResolvedStanceObstacleSettings& ResolvedSettings)
 {
+	InitNavModifier(ResolvedSettings);
 	if (!NavModifierComp) return;
 
 	GetWorld()->GetTimerManager().ClearTimer(NavModifierDeactivationTimer);
+	SyncNavModifierConfig(ResolvedSettings);
 	NavModifierComp->UpdateNavigationBounds();
 	NavModifierComp->SetNavigationRelevancy(true);
 }
@@ -158,24 +250,36 @@ void UTsnStanceObstacleComponent::EnterStanceMode()
 	if (CurrentMobilityStance == ETsnMobilityStance::Stance) return;
 	CurrentMobilityStance = ETsnMobilityStance::Stance;
 
+	FTsnResolvedStanceObstacleSettings ResolvedSettings;
+	GetResolvedSettings(ResolvedSettings);
+
 	// 补缓存（BeginPlay 时 Controller 可能还未 Possess）
 	if (!CrowdFollowingComp) CacheComponents();
 
 	if (CrowdFollowingComp)
 		CrowdFollowingComp->SetCrowdSimulationState(ECrowdSimulationState::ObstacleOnly);
 
-	if (bUseNavModifier)
-		ActivateNavModifier();
+	if (ResolvedSettings.bUseNavModifier)
+	{
+		ActivateNavModifier(ResolvedSettings);
+	}
+	else
+	{
+		DeactivateNavModifier();
+	}
 
 	float EffectiveObstacleRadius = 0.f;
 	float EffectiveRepulsionRadius = 0.f;
-	GetSanitizedRadii(EffectiveObstacleRadius, EffectiveRepulsionRadius);
+	GetSanitizedRadii(ResolvedSettings, EffectiveObstacleRadius, EffectiveRepulsionRadius);
 
 	if (UTsnStanceRepulsionSubsystem* RepSys =
 			GetWorld()->GetSubsystem<UTsnStanceRepulsionSubsystem>())
 	{
 		RepSys->RegisterStanceUnit(
-			GetOwner(), EffectiveRepulsionRadius, RepulsionStrength, EffectiveObstacleRadius);
+			GetOwner(),
+			EffectiveRepulsionRadius,
+			ResolvedSettings.RepulsionStrength,
+			EffectiveObstacleRadius);
 	}
 }
 
@@ -184,11 +288,14 @@ void UTsnStanceObstacleComponent::ExitStanceMode()
 	if (CurrentMobilityStance == ETsnMobilityStance::Moving) return;
 	CurrentMobilityStance = ETsnMobilityStance::Moving;
 
+	FTsnResolvedStanceObstacleSettings ResolvedSettings;
+	GetResolvedSettings(ResolvedSettings);
+
 	if (CrowdFollowingComp)
 		CrowdFollowingComp->SetCrowdSimulationState(ECrowdSimulationState::Enabled);
 
 	// 延迟关闭：避免其他单位路径突然跳变；对象池回收时立即关闭
-	if (bUseNavModifier && NavModifierComp)
+	if (ResolvedSettings.bUseNavModifier && NavModifierComp)
 	{
 		if (bIsReleasingOwner)
 		{
@@ -199,8 +306,13 @@ void UTsnStanceObstacleComponent::ExitStanceMode()
 			GetWorld()->GetTimerManager().SetTimer(
 				NavModifierDeactivationTimer, this,
 				&UTsnStanceObstacleComponent::DeactivateNavModifier,
-				NavModifierDeactivationDelay, false);
+				ResolvedSettings.NavModifierDeactivationDelay,
+				false);
 		}
+	}
+	else
+	{
+		DeactivateNavModifier();
 	}
 
 	if (UTsnStanceRepulsionSubsystem* RepSys =
@@ -212,14 +324,33 @@ void UTsnStanceObstacleComponent::ExitStanceMode()
 
 void UTsnStanceObstacleComponent::UpdateStanceUnitParams()
 {
+	FTsnResolvedStanceObstacleSettings ResolvedSettings;
+	GetResolvedSettings(ResolvedSettings);
+
+	// CDO、模板对象或尚未拥有有效 World 的阶段，只允许更新本地参数，
+	// 不能提前创建/注册运行时 NavModifier 或访问定时器与子系统。
+	if (IsTemplate() || !IsValid(GetOwner()) || GetWorld() == nullptr)
+	{
+		return;
+	}
+
 	float EffectiveObstacleRadius = 0.f;
 	float EffectiveRepulsionRadius = 0.f;
-	GetSanitizedRadii(EffectiveObstacleRadius, EffectiveRepulsionRadius);
-	const float EffectiveNavModifierRadius =
-		GetEffectiveNavModifierRadius(EffectiveObstacleRadius);
+	GetSanitizedRadii(ResolvedSettings, EffectiveObstacleRadius, EffectiveRepulsionRadius);
+	const float EffectiveNavModifierRadius = GetEffectiveNavModifierRadius(
+		ResolvedSettings,
+		EffectiveObstacleRadius);
 
-	if (bUseNavModifier && NavModifierComp)
+	if (ResolvedSettings.bUseNavModifier)
 	{
+		InitNavModifier(ResolvedSettings);
+		SyncNavModifierConfig(ResolvedSettings);
+
+		if (CurrentMobilityStance == ETsnMobilityStance::Stance)
+		{
+			NavModifierComp->SetNavigationRelevancy(true);
+		}
+
 		NavModifierComp->FailsafeExtent =
 			FVector(EffectiveNavModifierRadius, EffectiveNavModifierRadius, 100.f);
 		NavModifierComp->UpdateNavigationBounds();
@@ -230,6 +361,11 @@ void UTsnStanceObstacleComponent::UpdateStanceUnitParams()
 			NavSys->UpdateComponentInNavOctree(*NavModifierComp);
 		}
 	}
+	else
+	{
+		GetWorld()->GetTimerManager().ClearTimer(NavModifierDeactivationTimer);
+		DeactivateNavModifier();
+	}
 
 	if (CurrentMobilityStance == ETsnMobilityStance::Stance)
 	{
@@ -237,7 +373,10 @@ void UTsnStanceObstacleComponent::UpdateStanceUnitParams()
 				GetWorld()->GetSubsystem<UTsnStanceRepulsionSubsystem>())
 		{
 			RepSys->UpdateStanceUnit(
-				GetOwner(), EffectiveRepulsionRadius, RepulsionStrength, EffectiveObstacleRadius);
+				GetOwner(),
+				EffectiveRepulsionRadius,
+				ResolvedSettings.RepulsionStrength,
+				EffectiveObstacleRadius);
 		}
 	}
 }
@@ -255,67 +394,4 @@ void UTsnStanceObstacleComponent::OnOwnerReleased()
 	GetWorld()->GetTimerManager().ClearTimer(NavModifierDeactivationTimer);
 
 	bIsReleasingOwner = false;
-}
-
-void UTsnStanceObstacleComponent::DrawDebugObstacleState() const
-{
-#if ENABLE_DRAW_DEBUG
-	const AActor* OwnerActor = GetOwner();
-	if (!OwnerActor) return;
-
-	UWorld* World = OwnerActor->GetWorld();
-	if (!World) return;
-
-	float EffectiveObstacleRadius = 0.f;
-	float EffectiveRepulsionRadius = 0.f;
-	GetSanitizedRadii(EffectiveObstacleRadius, EffectiveRepulsionRadius);
-	const float EffectiveNavModifierRadius =
-		GetEffectiveNavModifierRadius(EffectiveObstacleRadius);
-	const FVector OwnerLocation = OwnerActor->GetActorLocation();
-	const bool bNavModifierActive =
-		bUseNavModifier && NavModifierComp && NavModifierComp->IsNavigationRelevant();
-
-	const FString NavAreaLabel = !bUseNavModifier
-		? TEXT("Disabled")
-		: (NavModifierMode == ETsnNavModifierMode::Impassable
-			? TEXT("NavArea_Null")
-			: TEXT("TsnNavArea_StanceUnit"));
-	const FString MobilityLabel =
-		CurrentMobilityStance == ETsnMobilityStance::Stance ? TEXT("Stance") : TEXT("Moving");
-	const FString DebugLabel = FString::Printf(
-		TEXT("%s | Nav=%s | Modifier=%s\nObstacle=%.0f Nav=%.0f Repulsion=%.0f"),
-		*MobilityLabel,
-		*NavAreaLabel,
-		bNavModifierActive ? TEXT("On") : TEXT("Off"),
-		EffectiveObstacleRadius,
-		EffectiveNavModifierRadius,
-		EffectiveRepulsionRadius);
-
-	DrawDebugCircle(World, OwnerLocation, EffectiveObstacleRadius, 32,
-		FColor::Red, false, -1.f, 0, 1.5f,
-		FVector::RightVector, FVector::ForwardVector, false);
-	DrawDebugCircle(World, OwnerLocation, EffectiveNavModifierRadius, 32,
-		bNavModifierActive ? FColor::Cyan : FColor(80, 80, 80), false, -1.f, 0, 1.5f,
-		FVector::RightVector, FVector::ForwardVector, false);
-	DrawDebugCircle(World, OwnerLocation, EffectiveRepulsionRadius, 32,
-		FColor::Yellow, false, -1.f, 0, 1.0f,
-		FVector::RightVector, FVector::ForwardVector, false);
-	DrawDebugCylinder(World,
-		OwnerLocation + FVector(0.f, 0.f, 2.f),
-		OwnerLocation + FVector(0.f, 0.f, 80.f),
-		EffectiveNavModifierRadius,
-		24,
-		bNavModifierActive ? FColor::Blue : FColor(60, 60, 60),
-		false,
-		-1.f,
-		0,
-		0.5f);
-	DrawDebugString(World,
-		OwnerLocation + FVector(0.f, 0.f, 110.f),
-		DebugLabel,
-		nullptr,
-		FColor::White,
-		0.f,
-		true);
-#endif
 }

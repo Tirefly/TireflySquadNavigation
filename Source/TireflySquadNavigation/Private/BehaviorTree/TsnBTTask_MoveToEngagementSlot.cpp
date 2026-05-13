@@ -14,6 +14,53 @@ namespace
 	// Crowd/PathFollowing 在接近槽位时可能会停在 AcceptanceRadius 外几个单位内，
 	// 给一个很小的抖动容差，避免任务在 30.1 / 30.5 这类边缘距离上反复零意图恢复。
 	constexpr float SlotArrivalJitterTolerance = 5.f;
+
+	// 槽位任务即使按“到达槽位”成功，也必须留在真实攻击窗口内，
+	// 否则会出现 MoveToEngagementSlot 结束后攻击装饰器立刻掉回移动分支的抖动。
+	constexpr float SlotArrivalAttackRangeGuard = 5.f;
+
+	float ComputeEffectiveSlotArrivalTolerance(
+		float BaseAcceptanceRadius,
+		float AttackRange,
+		float SlotRadius)
+	{
+		const float RequestedTolerance = FMath::Max(0.f, BaseAcceptanceRadius) + SlotArrivalJitterTolerance;
+		const float AttackRangeBudget = FMath::Max(0.f, AttackRange - SlotRadius - SlotArrivalAttackRangeGuard);
+		return FMath::Min(RequestedTolerance, AttackRangeBudget);
+	}
+
+	float GetRequesterCollisionRadius(const APawn* Pawn)
+	{
+		return IsValid(Pawn) ? FMath::Max(0.f, Pawn->GetSimpleCollisionRadius()) : 0.f;
+	}
+
+	FVector ComputeSlotNavigationGoal(
+		const APawn* Pawn,
+		const AActor* Target,
+		const FVector& SlotPosition)
+	{
+		if (!IsValid(Pawn) || !IsValid(Target))
+		{
+			return SlotPosition;
+		}
+
+		const FVector TargetLocation = Target->GetActorLocation();
+		FVector TargetToSlot = SlotPosition - TargetLocation;
+		TargetToSlot.Z = 0.f;
+
+		const float SlotRadius = TargetToSlot.Size();
+		const float RequesterRadius = GetRequesterCollisionRadius(Pawn);
+		if (SlotRadius <= KINDA_SMALL_NUMBER || RequesterRadius <= KINDA_SMALL_NUMBER)
+		{
+			return SlotPosition;
+		}
+
+		const float NavigationGoalRadius = FMath::Max(0.f, SlotRadius - RequesterRadius);
+		return FVector(
+			TargetLocation.X + TargetToSlot.X / SlotRadius * NavigationGoalRadius,
+			TargetLocation.Y + TargetToSlot.Y / SlotRadius * NavigationGoalRadius,
+			SlotPosition.Z);
+	}
 }
 
 UTsnBTTask_MoveToEngagementSlot::UTsnBTTask_MoveToEngagementSlot()
@@ -79,10 +126,21 @@ bool UTsnBTTask_MoveToEngagementSlot::RequestSlotAndMove(
 	}
 
 	CachedSlotPosition = SlotComp->RequestSlot(AICon->GetPawn(), CachedAttackRange);
-	const float EffectiveAcceptanceRadius = AcceptanceRadius + SlotArrivalJitterTolerance;
+	const FVector NavigationGoal = ComputeSlotNavigationGoal(
+		AICon->GetPawn(),
+		Target,
+		CachedSlotPosition);
+	const float SlotRadius = FVector::Dist2D(Target->GetActorLocation(), CachedSlotPosition);
+	const float EffectiveAcceptanceRadius = ComputeEffectiveSlotArrivalTolerance(
+		AcceptanceRadius,
+		CachedAttackRange,
+		SlotRadius);
 
 	FAIMoveRequest MoveReq;
-	MoveReq.SetGoalLocation(CachedSlotPosition);
+	// 槽位语义仍表示“单位中心最终应站到的环”，
+	// 但 Crowd/PathFollowing 往往会在目标点外保留一个请求者胶囊半径的停止余量。
+	// 这里把真正的导航目标向内收一个请求者半径，避免大胶囊近战长期停在槽位环外。
+	MoveReq.SetGoalLocation(NavigationGoal);
 	MoveReq.SetAcceptanceRadius(EffectiveAcceptanceRadius);
 	MoveReq.SetUsePathfinding(true);
 	// 与 TickTask 的槽位到达判定保持一致：按中心点到槽位快照的二维距离判断，
@@ -177,19 +235,28 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 	}
 
 	FVector PawnLoc = AICon->GetPawn()->GetActorLocation();
-	const float EffectiveAcceptanceRadius = AcceptanceRadius + SlotArrivalJitterTolerance;
 	FVector LiveSlotPosition = CachedSlotPosition;
 	if (UTsnEngagementSlotComponent* SlotComp = Target->FindComponentByClass<UTsnEngagementSlotComponent>())
 	{
-		// 使用当前已认领槽位的实时世界快照做判定，避免长期追逐过期的旧位置。
-		LiveSlotPosition = SlotComp->RequestSlot(AICon->GetPawn(), CachedAttackRange);
+		FTsnEngagementSlotInfo AssignedSlotInfo;
+		if (SlotComp->TryGetAssignedSlotInfo(AICon->GetPawn(), AssignedSlotInfo, LiveSlotPosition))
+		{
+			// 使用当前已认领槽位的只读实时世界快照做判定，
+			// 避免 Tick 期间为了“读当前位置”再次走 RequestSlot 的认领逻辑。
+			CachedSlotPosition = LiveSlotPosition;
+		}
 	}
 	const float DistanceToTarget = FVector::Dist2D(PawnLoc, Target->GetActorLocation());
 	const float LiveSlotRadius = FVector::Dist2D(Target->GetActorLocation(), LiveSlotPosition);
+	const float EffectiveAcceptanceRadius = ComputeEffectiveSlotArrivalTolerance(
+		AcceptanceRadius,
+		CachedAttackRange,
+		LiveSlotRadius);
 	const bool bWithinSlotRadiusTolerance = FMath::Abs(DistanceToTarget - LiveSlotRadius) <= EffectiveAcceptanceRadius;
 
-	// 退出条件 (a)：到达槽位
-	if (FVector::Dist2D(PawnLoc, LiveSlotPosition) <= EffectiveAcceptanceRadius)
+	// 退出条件 (a)：优先按“进入合法接战带”判定成功，
+	// 不再要求单位中心精确贴到槽位快照中心。
+	if (bWithinSlotRadiusTolerance)
 	{
 		AICon->StopMovement();
 		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
@@ -230,7 +297,11 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 			0.f);
 		const float RequestedSpeed = RequestedVelocity2D.Size();
 		const float ActualSpeed = AICon->GetPawn()->GetVelocity().Size2D();
-		const bool bZeroIntentStall = RequestedSpeed <= ZeroIntentRequestedSpeedThreshold
+		const bool bHasValidPath = PathComp && PathComp->HasValidPath();
+		const bool bPathActivelyMoving = bHasValidPath
+			&& AICon->GetMoveStatus() == EPathFollowingStatus::Moving;
+		const bool bZeroIntentStall = !bPathActivelyMoving
+			&& RequestedSpeed <= ZeroIntentRequestedSpeedThreshold
 			&& ActualSpeed <= ZeroIntentActualSpeedThreshold;
 
 		if (bZeroIntentStall)
@@ -250,7 +321,6 @@ void UTsnBTTask_MoveToEngagementSlot::TickTask(
 				const FString PathStatusDesc = PathComp
 					? PathComp->GetStatusDesc()
 					: TEXT("NoPathFollowingComponent");
-				const bool bHasValidPath = PathComp && PathComp->HasValidPath();
 				UE_LOG(LogTireflySquadNav, Warning,
 					TEXT("MoveToEngagementSlot: zero-intent stall recovery for Pawn=%s Target=%s DistToSlot=%.1f RequestedSpeed=%.1f ActualSpeed=%.1f MoveStatus=%d PathStatus=%s HasValidPath=%s EscapeActive=%s"),
 					*GetNameSafe(AICon->GetPawn()),

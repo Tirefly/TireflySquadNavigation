@@ -32,8 +32,6 @@ public partial class UTsnUnitSeparationComponent : UnrealSharp.Engine.UActorComp
         SeparationRadius_Offset = CallGetPropertyOffset(SeparationRadius_NativeProperty);
         IntPtr SeparationStrength_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "SeparationStrength");
         SeparationStrength_Offset = CallGetPropertyOffset(SeparationStrength_NativeProperty);
-        IntPtr bDrawDebugSeparation_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "bDrawDebugSeparation");
-        bDrawDebugSeparation_Offset = CallGetPropertyOffset(bDrawDebugSeparation_NativeProperty);
         IntPtr CachedRepulsionSubsystem_NativeProperty = CallGetNativePropertyFromName(NativeClassPtr, "CachedRepulsionSubsystem");
         CachedRepulsionSubsystem_Offset = CallGetPropertyOffset(CachedRepulsionSubsystem_NativeProperty);
         OnOwnerReleased_NativeFunction = UClassExporter.CallGetNativeFunctionFromClassAndName(NativeClassPtr, "OnOwnerReleased");
@@ -72,25 +70,6 @@ public partial class UTsnUnitSeparationComponent : UnrealSharp.Engine.UActorComp
         set
         {
             BlittableMarshaller<float>.ToNative(NativeObject + SeparationStrength_Offset, 0, value);
-        }
-    }
-    
-    
-    static int bDrawDebugSeparation_Offset;
-    
-    /// <summary>
-    /// 是否绘制分离力调试信息：分离力方向 + Stance 约束裁剪后的最终方向（箭头）。
-    /// 在 Shipping 配置中此属性仍存在，但实际绘制代码不会编译进去。
-    /// </summary>
-    public bool DrawDebugSeparation
-    {
-        get
-        {
-            return BoolMarshaller.FromNative(NativeObject + bDrawDebugSeparation_Offset, 0);
-        }
-        set
-        {
-            BoolMarshaller.ToNative(NativeObject + bDrawDebugSeparation_Offset, 0, value);
         }
     }
     

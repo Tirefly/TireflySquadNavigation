@@ -36,6 +36,7 @@ public class TireflySquadNavigation : ModuleRules
 			new string[]
 			{
 				"CoreUObject",
+				"DeveloperSettings",
 				"Engine",
 				"Slate",
 				"SlateCore",

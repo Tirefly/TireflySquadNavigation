@@ -64,7 +64,7 @@
   - 实现 `BeginPlay`：缓存 `CachedRepulsionSubsystem` 指针 + 向 Subsystem 注册为战术移动单位（**需 null-guard**）
   - 实现 `EndPlay`：使用 `CachedRepulsionSubsystem` 注销（**需 null-guard**），清空缓存指针
   - 实现 `OnOwnerReleased`：清零排斥力缓冲 + 注销 Subsystem 注册 + 清空 `CachedRepulsionSubsystem`
-  - `#if ENABLE_DRAW_DEBUG`：可视化当前帧消费的排斥力向量（箭头）
+  - `#if ENABLE_DRAW_DEBUG`：可视化当前帧消费的排斥力向量（箭头）。归档说明：这是 V2 当时的组件级 raw debug 任务，当前插件已由 `UTsnDebugDrawSubsystem` 统一接管运行时单位调试
   - **注意**：`BeginPlay/EndPlay` 需要 `#include "Subsystems/TsnStanceRepulsionSubsystem.h"`，该头文件在阶段 6 创建，因此本文件编译验证须延至 CP-2（阶段 3~6 全部完成后）
 
 ---
@@ -154,7 +154,7 @@
   - `UpdateStanceUnit`：直接修改已注册条目的数值（RepulsionRadius、RepulsionStrength、NavModifierRadius）
   - **`RegisterStanceUnit` 幂等**：注册前遍历检查是否已存在，若已注册则直接返回，不产生重复条目。防护 Blueprint 调用者连续两次调用 `EnterStanceMode`（无 Exit）的情况。
   - **`UnregisterStanceUnit` 幂等**：`RemoveAll` 对未注册的 Actor 无副作用，同时顺带清理失效的弱引用条目。
-  - `#if ENABLE_DRAW_DEBUG`：可视化内层/外层区域圆环 + 排斥力方向箭头
+  - `#if ENABLE_DRAW_DEBUG`：可视化内层/外层区域圆环 + 排斥力方向箭头。归档说明：这是 V2 当时的子系统级 raw debug 任务，当前插件已由 `UTsnDebugDrawSubsystem` 统一接管运行时单位调试
 
 ---
 
@@ -176,7 +176,7 @@
   - **多 Stance 单位裁剪策略**：累加所有 InwardToStance 方向后归一化，对最终 SeparationVector 做一次投影裁剪（而非逐个裁剪），避免遍历顺序依赖和过度衰减
   - 实现 `OnOwnerReleased`：`SetComponentTickEnabled(false)` + 注销 Moving 单位 + `CachedRepulsionSubsystem = nullptr`
   - 通过 `AddMovementInput(dir, SeparationStrength)` 注入（与路径跟随自然融合）；**不乘 DeltaTime**——`AddMovementInput` 仅写入 `PendingMovementInputVector`，速度积分由 CMC 自身的 `DeltaSeconds` 控制，30Hz tick 稀疏性不会导致低帧率下分离力脉冲放大
-  - `#if ENABLE_DRAW_DEBUG`：可视化分离力方向 + Stance 约束裁剪后的最终方向
+  - `#if ENABLE_DRAW_DEBUG`：可视化分离力方向 + Stance 约束裁剪后的最终方向。归档说明：这是 V2 当时的组件级 raw debug 任务，当前插件已由 `UTsnDebugDrawSubsystem` 统一接管运行时单位调试
   - **注意**：需要 `#include "Subsystems/TsnStanceRepulsionSubsystem.h"`，该头文件在阶段 6 创建，与 T3-2 同理，T7-2 须在阶段 6（CP-2）完成后才可实现（在 CP-3 统一验证）
 
 ---

@@ -65,6 +65,8 @@
 
 #### Scenario: 调试可视化绘制（仅 Debug/Development）
 
+> 归档说明（2026-05）：本场景记录的是 V2 方案中的组件级 raw debug 约定。当前插件运行时调试已统一收敛到 `UTsnDebugDrawSubsystem`，`bDrawDebugSeparation` 不再是现行正式契约的一部分。
+
 **Given** `bDrawDebugSeparation == true` 且构建配置包含 `ENABLE_DRAW_DEBUG`  
 **When** TickComponent 执行  
 **Then** 绘制分离力方向（蓝色箭头）和 Stance 约束裁剪后的最终方向（绿色箭头），SeparationRadius 以半透明球可视化
